@@ -1,4 +1,4 @@
-"""Instalador da Mantiqueira. Junta as partes baixadas e instala, sem precisar de internet.
+"""Instalador do Mantiqueira. Junta as partes baixadas e instala, sem precisar de internet.
 Compilado como Instalar-Mantiqueira.exe (PyInstaller)."""
 import json
 import os
@@ -13,6 +13,7 @@ from pathlib import Path
 
 AQUI = Path(sys.executable if getattr(sys, "frozen", False) else __file__).resolve().parent
 PADRAO = Path("C:/Mantiqueira")
+ATUALIZACAO = AQUI / "Mantiqueira-Atualizacao.zip"
 AZUL, FUNDO, TEXTO, CINZA = "#5aa0ff", "#030a1c", "#eef4ff", "#7f9fd6"
 
 
@@ -119,7 +120,8 @@ class App:
         tk.Label(self.r, text="assistente pessoal 100% offline", fg=CINZA, bg=FUNDO, font=("Segoe UI", 10)).pack()
         fr = tk.Frame(self.r, bg=FUNDO)
         fr.pack(pady=22, padx=30, fill="x")
-        tk.Label(fr, text="Instalar em:", fg=CINZA, bg=FUNDO, font=("Segoe UI", 10)).pack(anchor="w")
+        self.rotulo = tk.Label(fr, text="Instalar em:", fg=CINZA, bg=FUNDO, font=("Segoe UI", 10))
+        self.rotulo.pack(anchor="w")
         linha = tk.Frame(fr, bg=FUNDO)
         linha.pack(fill="x", pady=4)
         self.pasta = tk.StringVar(value=str(PADRAO))
@@ -136,7 +138,22 @@ class App:
                                font=("Segoe UI", 11, "bold"), relief="flat", padx=26, pady=6)
         self.botao.pack(pady=6)
         self.pacotes, problemas = verificar()
-        if problemas:
+        self.modo = "completo"
+        tem_base = any(n == "Mantiqueira.zip" for n, _, _ in self.pacotes)
+        ja_instalado = any((c / "Mantiqueira.exe").exists()
+                           for c in (PADRAO, Path(os.environ.get("LOCALAPPDATA", "C:/")) / "Mantiqueira"))
+        if ATUALIZACAO.exists() and (ja_instalado or not tem_base):
+            self.modo = "atualizar"
+            for c in (PADRAO, Path(os.environ.get("LOCALAPPDATA", "C:/")) / "Mantiqueira"):
+                if (c / "Mantiqueira.exe").exists():
+                    self.pasta.set(str(c))
+                    break
+            self.r.title("Atualizar Mantiqueira")
+            self.rotulo.configure(text="Atualizar a instalação em:")
+            self.botao.configure(text="ATUALIZAR")
+            self.msg.set("Atualização encontrada. Troca só o programa: lembretes, histórico e configurações são mantidos. "
+                         "Se o Mantiqueira estiver aberto, ele será fechado.")
+        elif problemas:
             self.msg.set("Atenção: " + " | ".join(problemas))
             self.botao.configure(state="disabled")
         else:
@@ -157,6 +174,8 @@ class App:
         self.r.after(0, fn, *a)
 
     def instalar(self):
+        if self.modo == "atualizar":
+            return self.atualizar()
         try:
             destino = Path(self.pasta.get())
             try:
@@ -190,16 +209,48 @@ class App:
                                 self.ui(self.barra.configure, {"value": feito * 1000 // max(1, total)})
                         self.ui(self.msg.set, f"Instalando… {feito / 2**30:.1f} de {total / 2**30:.1f} GB — {rel[-60:]}")
                 fonte.close()
+            if ATUALIZACAO.exists():
+                self.ui(self.msg.set, "Aplicando a atualização…")
+                with zipfile.ZipFile(ATUALIZACAO) as z:
+                    shutil.rmtree(destino / "app", ignore_errors=True)
+                    z.extractall(destino)
             self.ui(self.msg.set, "Criando atalhos…")
             atalhos(destino)
             self.ui(self.fim, destino)
         except Exception as e:
             self.ui(self.erro, str(e))
 
+    def atualizar(self):
+        try:
+            destino = Path(self.pasta.get())
+            if not (destino / "Mantiqueira.exe").exists():
+                raise RuntimeError(f"Não encontrei o Mantiqueira instalado em {destino}. Escolha a pasta da instalação.")
+            self.ui(self.msg.set, "Fechando o Mantiqueira…")
+            ps = ("Get-Process pythonw,python,llama-server -ErrorAction SilentlyContinue | "
+                  f"Where-Object {{ $_.Path -like '{destino}*' }} | Stop-Process -Force")
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], creationflags=0x08000000)
+            import time
+            time.sleep(2)
+            with zipfile.ZipFile(ATUALIZACAO) as z:
+                nomes = [i for i in z.infolist() if not i.is_dir()]
+                if not any(i.filename.startswith("app/") for i in nomes):
+                    raise RuntimeError("O arquivo de atualização não parece válido.")
+                shutil.rmtree(destino / "app", ignore_errors=True)
+                for k, info in enumerate(nomes, 1):
+                    alvo = destino / info.filename
+                    alvo.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(info) as src, open(alvo, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    self.ui(self.barra.configure, {"value": k * 1000 // len(nomes)})
+            self.ui(self.fim, destino)
+        except Exception as e:
+            self.ui(self.erro, str(e))
+
     def fim(self, destino):
         self.barra.configure(value=1000)
-        self.msg.set(f"Instalada em {destino}. Atalho criado na Área de Trabalho.")
-        if messagebox.askyesno("Mantiqueira", "Instalação concluída!\n\nAbrir a Mantiqueira agora?\n"
+        self.msg.set(f"Pronto: {destino}.")
+        titulo = "Atualização concluída!" if self.modo == "atualizar" else "Instalação concluída!"
+        if messagebox.askyesno("Mantiqueira", titulo + "\n\nAbrir o Mantiqueira agora?\n"
                                               "(A primeira abertura leva cerca de 1 minuto.)"):
             os.startfile(str(destino / "Mantiqueira.exe"))
         self.r.destroy()

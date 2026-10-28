@@ -18,6 +18,36 @@ VOZ_PERSONALIZADA_WAV = paths.DADOS / "voz_personalizada.wav"
 VOZ_PERSONALIZADA_PT = paths.DADOS / "voz_personalizada.pt"
 
 
+def dividir_frases(texto, limite=190):
+    """Divide em frases curtas (o XTTS fica instável com trechos longos)."""
+    import re
+    partes = [p.strip() for p in re.split(r"(?<=[.!?…;:])\s+", texto) if p.strip()]
+    out = []
+    for p in partes:
+        while len(p) > limite:
+            corte = p.rfind(",", 0, limite)
+            corte = corte if corte > 40 else p.rfind(" ", 0, limite)
+            corte = corte if corte > 0 else limite
+            out.append(p[:corte + 1].strip())
+            p = p[corte + 1:].strip()
+        if p:
+            out.append(p)
+    return out or [texto]
+
+
+def suavizar(wav, sr=24000):
+    """Tira cliques no começo e no fim do áudio."""
+    n = min(len(wav) // 4, int(sr * 0.012))
+    if n > 0:
+        rampa = np.linspace(0, 1, n, dtype=np.float32)
+        wav[:n] *= rampa
+        wav[-n:] *= rampa[::-1]
+    pico = float(np.max(np.abs(wav))) if wav.size else 0
+    if pico > 0.99:
+        wav = wav / pico * 0.95
+    return wav
+
+
 class Voz:
     def __init__(self, nucleo, ao_inicio, ao_fim):
         self.n = nucleo
@@ -161,16 +191,38 @@ class Voz:
             pass
 
     def _falar_xtts(self, texto, voz_id):
+        """Gera frase por frase: enquanto uma toca, a próxima já está sendo gerada (sem engasgos)."""
         import torch
         import sounddevice as sd
         lat, emb = self._lat(voz_id)
-        with torch.inference_mode():
-            partes = self.xtts.inference_stream(texto, "pt", lat, emb, enable_text_splitting=True,
-                                                temperature=0.65, speed=1.05)
-            with sd.OutputStream(samplerate=24000, channels=1, dtype="float32") as out:
-                for p in partes:
-                    a = p.squeeze().float().cpu().numpy().astype(np.float32)
-                    out.write(a.reshape(-1, 1))
+        frases = dividir_frases(texto)
+        fila = queue.Queue(maxsize=4)
+        erro = []
+
+        def gerar():
+            try:
+                with torch.inference_mode():
+                    for f in frases:
+                        out = self.xtts.inference(f, "pt", lat, emb, temperature=0.6, repetition_penalty=5.0,
+                                                  top_p=0.85, speed=1.0, enable_text_splitting=False)
+                        wav = np.asarray(out["wav"], dtype=np.float32)
+                        fila.put(suavizar(wav))
+            except Exception as e:
+                erro.append(e)
+            finally:
+                fila.put(None)
+
+        threading.Thread(target=gerar, daemon=True, name="voz-gerar").start()
+        pausa = np.zeros(int(24000 * 0.18), dtype=np.float32)
+        tocou = False
+        while True:
+            a = fila.get()
+            if a is None:
+                break
+            sd.play(np.concatenate([a, pausa]), 24000, blocking=True, latency="high")
+            tocou = True
+        if erro and not tocou:
+            raise erro[0]
 
     def _falar_piper(self, texto):
         import sounddevice as sd
@@ -185,5 +237,4 @@ class Voz:
         audio = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
         if audio.size:
             self.tipo_atual = "RÁPIDA"
-            sd.play(audio, taxa)
-            sd.wait()
+            sd.play(audio, taxa, blocking=True, latency="high")

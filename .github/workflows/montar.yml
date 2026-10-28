@@ -115,6 +115,8 @@ jobs:
         run: |
           python build\empacotar.py $env:DIST $env:OUT
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          python build\atualizacao.py $env:OUT
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item C:\m\inst\Instalar-Mantiqueira.exe $env:OUT
           Copy-Item LEIA-ME.txt $env:OUT
           Get-ChildItem $env:OUT | Format-Table Name, @{n='MB';e={[int]($_.Length/1MB)}}
@@ -123,6 +125,6 @@ jobs:
         shell: pwsh
         run: |
           $tag = "v1.0.${{ github.run_number }}"
-          $notas = "Baixe TODOS os arquivos abaixo para a mesma pasta e rode Instalar-Mantiqueira.exe. Os arquivos Mantiqueira-Turbo.zip.* sao opcionais (modo Turbo). Veja LEIA-ME.txt."
+          $notas = "JA TEM O MANTIQUEIRA INSTALADO? Baixe so Instalar-Mantiqueira.exe e Mantiqueira-Atualizacao.zip, coloque numa pasta nova e rode o instalador (atualiza em segundos, mantendo seus dados). INSTALACAO NOVA: baixe todos os arquivos (Turbo e opcional) para a mesma pasta e rode Instalar-Mantiqueira.exe. Veja LEIA-ME.txt."
           gh release create $tag --title "Mantiqueira $tag" --notes $notas (Get-ChildItem $env:OUT).FullName
           if ($LASTEXITCODE -ne 0) { exit 1 }

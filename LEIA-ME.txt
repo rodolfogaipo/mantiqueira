@@ -9,7 +9,7 @@ COMO INSTALAR
      - Mantiqueira.zip.001, .002, .003 ... (todas as partes)
      - Mantiqueira-Turbo.zip.001 ... (OPCIONAL: modo Turbo, IA maior)
 2. Copie essa pasta inteira para um pendrive (16 GB ou mais).
-3. No computador da Mantiqueira, copie a pasta do pendrive para o disco
+3. No computador do Mantiqueira, copie a pasta do pendrive para o disco
    e dê dois cliques em Instalar-Mantiqueira.exe.
 4. Ao terminar, aparece o atalho "Mantiqueira" na Área de Trabalho.
    Depois de instalar, a pasta baixada pode ser apagada.
@@ -30,6 +30,11 @@ COMO USAR
     "anota que a medida da viga é 3200"
     "o que está escrito na minha tela?"
     "o que eu tenho pra hoje?"
+
+COMO ATUALIZAR (quando já está instalado)
+- Baixe só Instalar-Mantiqueira.exe e Mantiqueira-Atualizacao.zip da versão
+  mais nova, coloque os dois numa pasta nova e rode o instalador.
+  Ele troca só o programa; lembretes, histórico e configurações ficam.
 
 PRIMEIRA ABERTURA
 - Leva cerca de 1 minuto para carregar a IA e a voz.

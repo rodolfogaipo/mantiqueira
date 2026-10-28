@@ -129,7 +129,7 @@ class Api:
     def testar_voz(self, voz_id):
         if self._n.voz:
             t = self._n.cfg["tratamento"]
-            self._n.voz.falar(f"Olá, {t}. Eu sou a Mantiqueira, e esta é a minha voz.", voz_id or None)
+            self._n.voz.falar(f"Olá, {t}. Eu sou o Mantiqueira, e esta é a minha voz.", voz_id or None)
         return True
 
     def gravar_voz(self):

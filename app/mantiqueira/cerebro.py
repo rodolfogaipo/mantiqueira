@@ -14,9 +14,8 @@ ESQUEMA = {
     "properties": {
         "resposta": {"type": "string"},
         "acao": {"type": "string", "enum": ["nenhuma", "criar_lembrete", "abrir_arquivo", "salvar_nota",
-                                             "ler_tela", "concluir_lembrete"]},
+                                             "ler_tela", "concluir_lembrete", "mudar_tratamento", "mudar_nome"]},
         "quando": {"type": "string"},
-        "repetir": {"type": "string", "enum": ["", "diario", "semanal", "dias_uteis"]},
         "texto": {"type": "string"},
         "arquivo": {"type": "string"},
     },
@@ -39,6 +38,7 @@ class Cerebro:
     def __init__(self, nucleo):
         self.n = nucleo
         self.historico = []   # [{"role","content"}]
+        self.lembrete_pendente = None
         for r in self.n.db.conversa_ultimas(8):
             self.historico.append({"role": "user" if r["papel"] == "usuario" else "assistant", "content": r["texto"]})
 
@@ -97,28 +97,38 @@ class Cerebro:
 
     def _sistema(self, pergunta):
         cfg = self.n.cfg
-        return f"""Você é a Mantiqueira, assistente pessoal de voz que roda 100% offline no computador de {cfg['nome']}.
-Fale em português do Brasil, com educação e calma. Trate o usuário por "{cfg['tratamento']}".
-Suas respostas serão FALADAS em voz alta: use 1 a 3 frases curtas, sem listas, sem markdown, sem emojis.
-Sobre o que o usuário fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
+        t = cfg["tratamento"]
+        return f"""Você é o Mantiqueira, assistente pessoal e secretário de {cfg['nome']}. Você é masculino: fale de si mesmo no masculino ("estou pronto", "fiquei sabendo", "o Mantiqueira").
+Você roda 100% offline no computador dele. Fale em português do Brasil, com educação, calma e jeito de um secretário experiente: atencioso, prático, um pouco formal.
+Chame o usuário de "{t}". O seu nome é Mantiqueira; o usuário NÃO se chama Mantiqueira.
+Suas respostas serão FALADAS: 1 a 3 frases curtas, sem listas, sem markdown, sem emojis.
+Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
+Sobre o que ele fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
 
 Responda SEMPRE em JSON com os campos:
 - resposta: o que você vai falar.
-- acao: nenhuma | criar_lembrete | abrir_arquivo | salvar_nota | ler_tela | concluir_lembrete
-- quando: para criar_lembrete, data e hora no formato AAAA-MM-DD HH:MM (calcule a partir de AGORA).
-- repetir: "" | diario | semanal | dias_uteis
-- texto: o texto do lembrete, da nota, ou do lembrete a concluir.
+- acao: nenhuma | criar_lembrete | abrir_arquivo | salvar_nota | ler_tela | concluir_lembrete | mudar_tratamento | mudar_nome
+- quando: só para criar_lembrete, no formato AAAA-MM-DD HH:MM, calculado a partir de AGORA, e SÓ se ele disse a hora ou o dia.
+- texto: o texto do lembrete (curto, no infinitivo: "Ligar para o fornecedor"), da nota, do lembrete a concluir, ou o novo tratamento/nome.
 - arquivo: o nome do arquivo a abrir (exatamente como aparece no registro).
 
-Quando usar cada ação:
-- "me lembra", "me avisa", "não me deixa esquecer" → criar_lembrete. Se a hora não foi dita, pergunte e use nenhuma.
+Regras:
+- criar_lembrete SOMENTE quando ele pedir para lembrar/avisar/agendar algo. Se ele não disse quando, use acao nenhuma e pergunte "Para quando, {t}?".
+- "fale X", "diga X", "repete X" → apenas fale X na resposta (acao nenhuma). Não é lembrete.
+- "me chame de X", "pode me chamar de X", "quero que me chame de X" → mudar_tratamento com texto X.
+- "meu nome é X" → mudar_nome com texto X.
 - "abre", "abrir", "pode abrir" (inclusive "sim" logo depois de você oferecer abrir algo) → abrir_arquivo.
-- "anota", "guarda que", "lembre-se que", "grava que" → salvar_nota com a informação.
-- "o que tem na minha tela", "lê a tela", "o que está escrito aqui" → ler_tela.
-- "já fiz", "pode tirar o lembrete", "conclui o lembrete" → concluir_lembrete.
+- "anota que", "guarda que", "lembre-se que (uma informação, sem horário)" → salvar_nota.
+- "o que tem na minha tela", "lê a tela" → ler_tela.
+- "já fiz", "pode tirar o lembrete", "apaga o lembrete" → concluir_lembrete.
+
 Exemplos:
-Usuário: me lembra amanhã às 9 de ligar pro fornecedor → {{"resposta":"Certo, {cfg['tratamento']}. Amanhã às 9 eu aviso para ligar ao fornecedor.","acao":"criar_lembrete","quando":"(data de amanhã) 09:00","repetir":"","texto":"Ligar para o fornecedor"}}
-Usuário: que horas são? → {{"resposta":"São 10 e 30, {cfg['tratamento']}.","acao":"nenhuma"}}
+Usuário: me lembra de ligar pro fornecedor → {{"resposta":"Claro, {t}. Para quando?","acao":"nenhuma"}}
+Usuário: amanhã às 9 → {{"resposta":"Combinado. Amanhã às 9 eu aviso para ligar ao fornecedor.","acao":"criar_lembrete","quando":"(amanhã) 09:00","texto":"Ligar para o fornecedor"}}
+Usuário: fale Leandrinho vá trabalhar → {{"resposta":"Leandrinho, vá trabalhar!","acao":"nenhuma"}}
+Usuário: me chame de doutor → {{"resposta":"Como preferir, doutor.","acao":"mudar_tratamento","texto":"doutor"}}
+Usuário: tudo bem com você? → {{"resposta":"Tudo ótimo, {t}, pronto para ajudar. E o senhor, como está o dia?","acao":"nenhuma"}}
+Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre o senhor? A que horas é a reunião?","acao":"nenhuma"}}
 
 {self._contexto(pergunta)}"""
 
@@ -127,6 +137,17 @@ Usuário: que horas são? → {{"resposta":"São 10 e 30, {cfg['tratamento']}.",
         n = self.n
         if not n.ia or not n.ia.pronta:
             return "Ainda estou carregando a inteligência, " + n.cfg["tratamento"] + ". Tente de novo em alguns segundos."
+        trat = n.cfg["tratamento"]
+
+        # resposta a "Para quando?" de um lembrete pendente
+        if self.lembrete_pendente:
+            pend, self.lembrete_pendente = self.lembrete_pendente, None
+            quando = textutil.parse_quando("", agora(), pergunta) if textutil.tem_tempo(pergunta) else None
+            if quando and time.time() - pend["t"] < 600:
+                resp = self._criar_lembrete(pend["texto"], quando, pend["pergunta"] + " " + pergunta)
+                self._guardar(pergunta, resp)
+                return resp
+
         msgs = [{"role": "system", "content": self._sistema(pergunta)}] + self.historico[-8:] + \
                [{"role": "user", "content": pergunta}]
         t0 = time.time()
@@ -139,30 +160,94 @@ Usuário: que horas são? → {{"resposta":"São 10 e 30, {cfg['tratamento']}.",
         resposta = (r.get("resposta") or "").strip()
         acao = (r.get("acao") or "nenhuma").strip()
         log.info("IA: acao=%s r=%r", acao, r)
+
+        # proteções contra a IA se confundir
+        if acao == "criar_lembrete" and not textutil.pede_lembrete(pergunta) and not self._ultimo_perguntou_quando():
+            acao = "nenhuma"
+            resposta = self._conversa_simples(pergunta) or resposta
+        if acao == "nenhuma" and textutil.pede_lembrete(pergunta) and not textutil.tem_tempo(pergunta):
+            self.lembrete_pendente = {"texto": (r.get("texto") or "").strip() or textutil.texto_do_lembrete(pergunta),
+                                      "pergunta": pergunta, "t": time.time()}
+            if "?" not in resposta:
+                resposta = f"Claro, {trat}. Para quando devo marcar?"
         try:
             resposta = self._executar(acao, r, pergunta, resposta)
         except Exception:
             log.exception("falha ao executar %s", acao)
-            resposta = "Não consegui concluir isso agora, " + n.cfg["tratamento"] + "."
+            resposta = "Não consegui concluir isso agora, " + trat + "."
         if not resposta:
             resposta = "Pronto."
+        self._guardar(pergunta, resposta)
+        return resposta
+
+    def _guardar(self, pergunta, resposta):
         self.historico += [{"role": "user", "content": pergunta}, {"role": "assistant", "content": resposta}]
         self.historico = self.historico[-12:]
-        return resposta
+
+    def _ultimo_perguntou_quando(self):
+        if not self.historico:
+            return False
+        u = textutil.sem_acento(self.historico[-1]["content"].lower())
+        return self.historico[-1]["role"] == "assistant" and "?" in u and \
+            any(p in u for p in ("quando", "que horas", "qual horario", "que dia"))
+
+    def _conversa_simples(self, pergunta):
+        """Resposta comum, sem ações (usada quando a IA quis criar um lembrete que ninguém pediu)."""
+        try:
+            msgs = [{"role": "system", "content":
+                     f"Você é o Mantiqueira, secretário pessoal de {self.n.cfg['nome']}, masculino, educado. "
+                     f"Chame-o de '{self.n.cfg['tratamento']}'. Responda em português do Brasil, em 1 a 2 frases "
+                     "curtas para serem faladas. Se ele pedir para você falar ou dizer algo, apenas diga aquilo."}] + \
+                   self.historico[-6:] + [{"role": "user", "content": pergunta}]
+            return self.n.ia.conversar(msgs, None, max_tokens=120).strip().strip('"')
+        except Exception:
+            log.exception("conversa simples")
+            return ""
+
+    def _criar_lembrete(self, texto, quando, frase_usuario):
+        repetir = textutil.repeticao(frase_usuario)
+        texto = (texto or "Lembrete").strip().rstrip(".")
+        texto = texto[:1].upper() + texto[1:]
+        self.n.db.lembrete_novo(quando, texto, "voz", repetir)
+        hoje = dt.date.today()
+        if quando.date() == hoje:
+            dia = "hoje"
+        elif quando.date() == hoje + dt.timedelta(days=1):
+            dia = "amanhã"
+        else:
+            dia = f"{textutil.DIAS_SEMANA[quando.weekday()]}, dia {quando.day}"
+        rep = {"diario": ", todos os dias", "semanal": ", toda semana", "dias_uteis": ", nos dias úteis"}.get(repetir, "")
+        hora = f"{quando.hour}h" if quando.minute == 0 else f"{quando.hour}:{quando:%M}"
+        return f"Combinado, {self.n.cfg['tratamento']}. Aviso {dia} às {hora}{rep}: {texto[:1].lower() + texto[1:]}."
 
     def _executar(self, acao, r, pergunta, resposta):
         n, db, trat = self.n, self.n.db, self.n.cfg["tratamento"]
         if acao == "criar_lembrete":
-            texto = (r.get("texto") or "").strip() or pergunta
-            quando = textutil.parse_quando(r.get("quando", ""), agora(), pergunta)
-            if not quando:
-                return f"Para quando devo marcar, {trat}?"
-            if quando < agora() - dt.timedelta(minutes=1):
-                quando = textutil.parse_quando("", agora(), pergunta) or quando
-            repetir = r.get("repetir") or ""
-            db.lembrete_novo(quando, texto[:1].upper() + texto[1:], "voz", repetir)
-            if not resposta:
-                resposta = f"Lembrete marcado para {quando:%d/%m} às {quando:%H:%M}."
+            texto = (r.get("texto") or "").strip() or textutil.texto_do_lembrete(pergunta)
+            contexto = pergunta
+            if self._ultimo_perguntou_quando() and len(self.historico) >= 2:
+                contexto = self.historico[-2]["content"] + " " + pergunta
+            quando = None
+            if textutil.tem_tempo(pergunta):
+                quando = textutil.parse_quando("", agora(), pergunta)
+                if not quando:
+                    quando = textutil.parse_quando(r.get("quando", ""), agora())
+            if not quando or quando < agora() - dt.timedelta(minutes=1):
+                self.lembrete_pendente = {"texto": texto, "pergunta": pergunta, "t": time.time()}
+                return f"Claro, {trat}. Para quando devo marcar?"
+            return self._criar_lembrete(texto, quando, contexto)
+        if acao == "mudar_tratamento":
+            novo = (r.get("texto") or "").strip().strip(".!").lower()
+            novo = re.sub(r"^(o|a|de)\s+", "", novo)
+            if not novo or len(novo) > 30:
+                return f"Como o {trat} prefere ser chamado?"
+            n.cfg.atualizar({"tratamento": novo})
+            return f"Como preferir, {novo}."
+        if acao == "mudar_nome":
+            novo = (r.get("texto") or "").strip().strip(".!")
+            if novo and len(novo) <= 40:
+                n.cfg.atualizar({"nome": novo[:1].upper() + novo[1:]})
+                return f"Muito prazer, {novo}. Vou lembrar disso."
             return resposta
         if acao == "abrir_arquivo":
             nome = (r.get("arquivo") or "").strip()
@@ -188,7 +273,7 @@ Usuário: que horas são? → {{"resposta":"São 10 e 30, {cfg['tratamento']}.",
                     melhor, nota = l, sc
             if melhor and nota >= 0.35:
                 db.lembrete_status(melhor["id"], "concluido")
-                return resposta or f"Lembrete \"{melhor['texto']}\" concluído."
+                return f"Pronto, tirei o lembrete \"{melhor['texto']}\"."
             return f"Não achei esse lembrete, {trat}."
         if acao == "ler_tela":
             from . import tela
@@ -198,8 +283,9 @@ Usuário: que horas são? → {{"resposta":"São 10 e 30, {cfg['tratamento']}.",
             if not texto:
                 return f"Não consegui ler nada na tela, {trat}."
             msgs = [{"role": "system", "content":
-                     "Você é a Mantiqueira. Responda em português do Brasil, em 1 a 3 frases curtas para serem "
-                     "faladas, sem listas. Use o TEXTO DA TELA para responder ao pedido do usuário."},
+                     f"Você é o Mantiqueira, secretário pessoal. Chame o usuário de '{trat}'. Responda em português "
+                     "do Brasil, em 1 a 3 frases curtas para serem faladas, sem listas. Use o TEXTO DA TELA para "
+                     "responder ao pedido do usuário."},
                     {"role": "user", "content": f"TEXTO DA TELA:\n{texto}\n\nPEDIDO: {pergunta}"}]
             return n.ia.conversar(msgs, None, max_tokens=250).strip()
         return resposta

@@ -43,12 +43,12 @@
     <button type="button" class="chip" id="bCfg">CONFIGURAÇÕES</button>
   </div>
   <div class="relogio">
-    <div class="disp brilho hora"><span id="hm">--:--</span><span id="sec" class="seg">:--</span></div>
+    <div class="disp brilho hora"><span id="relHM">--:--</span><span id="sec" class="seg">:--</span></div>
     <div class="mono data" id="data">—</div>
   </div>
 </header>
 
-<svg class="abs hsvg" style="left:420px;top:80px" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Núcleo da Mantiqueira">
+<svg class="abs hsvg" style="left:420px;top:80px" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Núcleo do Mantiqueira">
   <defs>
     <radialGradient id="cg" cx="50%" cy="50%" r="50%"><stop offset="0%" style="stop-color:var(--hi);stop-opacity:.85"/><stop offset="28%" style="stop-color:var(--p);stop-opacity:.4"/><stop offset="70%" style="stop-color:var(--p3);stop-opacity:.15"/><stop offset="100%" style="stop-color:var(--p3);stop-opacity:0"/></radialGradient>
     <linearGradient id="swg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" style="stop-color:var(--p);stop-opacity:0"/><stop offset="100%" style="stop-color:var(--p);stop-opacity:.3"/></linearGradient>
@@ -126,7 +126,7 @@
   </div>
   <form id="cmdf" class="cmd" autocomplete="off">
     <span class="mono brilho seta">›</span>
-    <label for="cmd" class="sr">Mensagem para a Mantiqueira</label>
+    <label for="cmd" class="sr">Mensagem para o Mantiqueira</label>
     <input id="cmd" type="text" placeholder="digite ou diga MANTIQUEIRA">
     <button type="button" class="ib" id="bMic" aria-label="Falar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     <button type="submit" class="ib ibP" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></button>
@@ -160,7 +160,7 @@
     <div class="cfg">
       <div class="col">
         <label class="campo"><span>Seu nome</span><input id="cNome" type="text"></label>
-        <label class="campo"><span>Como ela te chama</span><input id="cTrat" type="text" placeholder="senhor"></label>
+        <label class="campo"><span>Como ele te chama</span><input id="cTrat" type="text" placeholder="senhor"></label>
         <div class="campo"><span>Voz</span>
           <div class="linha"><select id="cVoz"></select><button type="button" class="chip" id="cTestar">TESTAR</button></div>
         </div>

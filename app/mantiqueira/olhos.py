@@ -15,6 +15,13 @@ from .db import agora, d as parse_dt, s as fmt_dt
 log = logging.getLogger("olhos")
 
 INATIVO_SEG = 300        # 5 min sem mexer = pausa
+IGNORAR_PROCESSOS = {
+    "shellexperiencehost.exe", "searchhost.exe", "searchapp.exe", "startmenuexperiencehost.exe", "lockapp.exe",
+    "textinputhost.exe", "shellhost.exe", "systemsettingsbroker.exe", "taskmgr.exe", "pythonw.exe", "python.exe",
+    "rundll32.exe", "openwith.exe", "consent.exe", "snippingtool.exe", "screenclippinghost.exe",
+}
+IGNORAR_TITULOS = {"Program Manager", "Barra de Tarefas", "Taskbar", "Iniciar", "Start",
+                   "Central de Notificações", "Notification Center", "Configurações rápidas", "Quick settings"}
 INTERVALO = 2.0
 
 
@@ -89,8 +96,12 @@ class Olhos:
                 pid, proc, titulo = j
                 if pid == meu_pid or not titulo.strip():
                     continue
+                if proc.lower() in IGNORAR_PROCESSOS or (proc.lower() == "explorer.exe" and titulo in IGNORAR_TITULOS):
+                    continue   # barra de tarefas, área de trabalho, menus do Windows
                 if self._privado(proc, titulo):
                     app, titulo, arquivo, nao_salvo = "Privado", "", "", False
+                elif proc.lower() == "applicationframehost.exe":
+                    app, arquivo, nao_salvo = titulo.strip(), "", False   # apps da loja (Calculadora, Fotos…)
                 else:
                     app = textutil.nome_app(proc)
                     arquivo, nao_salvo = textutil.extrair_arquivo(proc, titulo)

@@ -28,7 +28,7 @@ def main():
     log.info("==== Mantiqueira %s iniciando ====", VERSAO)
     ctypes.windll.kernel32.CreateMutexW(None, False, "Mantiqueira_Instancia_Unica")
     if ctypes.windll.kernel32.GetLastError() == 183:
-        aviso("A Mantiqueira já está aberta.", erro=False)
+        aviso("O Mantiqueira já está aberto.", erro=False)
         return
 
     import webview
@@ -74,5 +74,5 @@ if __name__ == "__main__":
         main()
     except Exception:
         log.critical("erro fatal:\n%s", traceback.format_exc())
-        aviso("A Mantiqueira encontrou um erro ao abrir.\n\nDetalhes em:\n" + str(paths.DADOS / "mantiqueira.log"))
+        aviso("O Mantiqueira encontrou um erro ao abrir.\n\nDetalhes em:\n" + str(paths.DADOS / "mantiqueira.log"))
         raise

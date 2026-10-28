@@ -247,3 +247,47 @@ def para_fala(t: str) -> str:
     t = re.sub(r"(?<=[a-zA-Z])_(?=[a-zA-Z0-9])", " ", t)
     t = re.sub(r"\s+", " ", t)
     return t.strip()
+
+
+# ---------------- intenção de lembrete ----------------
+_RX_LEMBRETE = re.compile(
+    r"\b(me lembr|lembr[ae] (me|de|que)|me avis|avis[ae] (me|de|que|quando)|nao (me )?deix[ae] esquecer|"
+    r"agend(e|ar)\b|agenda (pra|para|um|uma|isso|ai|a reuniao|o)\b|marc[ae]r? (um |uma )?(lembrete|compromisso|reuniao|horario)|"
+    r"cri[ae]r? (um )?lembrete|poe (um )?lembrete|coloc[ae] (um )?lembrete)")
+_RX_TEMPO = re.compile(
+    r"\b(\d{1,2}\s*(h|:|horas?)|as \d|a \d{1,2}\b|daqui|em \d+|em (um|uma|dois|duas|meia)|dentro de|amanha|hoje|"
+    r"depois de amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo|\d{1,2}/\d{1,2}|meio[- ]dia|"
+    r"meia[- ]noite|semana que vem|toda|todo dia|todos os dias|diariamente|dias uteis|de manha|a tarde|a noite)\b")
+
+
+def pede_lembrete(t: str) -> bool:
+    return bool(_RX_LEMBRETE.search(sem_acento((t or "").lower())))
+
+
+def tem_tempo(t: str) -> bool:
+    return bool(_RX_TEMPO.search(sem_acento((t or "").lower())))
+
+
+def repeticao(t: str) -> str:
+    t = sem_acento((t or "").lower())
+    if re.search(r"dias? ute(is|l)|segunda a sexta", t):
+        return "dias_uteis"
+    if re.search(r"todo (santo )?dia|todos os dias|diariamente|toda (manha|tarde|noite)", t):
+        return "diario"
+    if re.search(r"toda semana|todas as semanas|semanalmente|tod[ao]s? (as )?(segunda|terca|quarta|quinta|sexta|sabado|domingo)", t):
+        return "semanal"
+    return ""
+
+
+def texto_do_lembrete(t: str) -> str:
+    """Tira 'me lembra de', horários etc. e deixa só a tarefa."""
+    x = (t or "").strip()
+    x = re.sub(r"^(mantiqueira[,!]?\s*)", "", x, flags=re.I)
+    x = re.sub(r"^(por favor[, ]*)?(me )?(lembr[ae]|avis[ae])( me)?( de| que| para| pra)?\s*", "", x, flags=re.I)
+    x = re.sub(r"\b(daqui|em|dentro de)\s+(a\s+)?(\d+|um|uma|dois|duas|meia)\s*(minutos?|min|horas?|hora|dias?)\b", "", x, flags=re.I)
+    x = re.sub(r"\b(amanh[ãa]|hoje|depois de amanh[ãa])\b", "", x, flags=re.I)
+    x = re.sub(r"\b(toda|todo|todas|todos)( as| os)? (dia|dias|semana|segunda|terça|terca|quarta|quinta|sexta|sábado|sabado|domingo)s?(-feira)?( úteis| uteis)?\b", "", x, flags=re.I)
+    x = re.sub(r"\b(às|as|a|pelas)\s+\d{1,2}([:h]\d{2})?( horas?)?( da (manhã|manha|tarde|noite))?", "", x, flags=re.I)
+    x = re.sub(r"^(de|da|do|para|pra)\s+", "", x.strip(), flags=re.I)
+    x = re.sub(r"\s+", " ", x).strip(" ,.;")
+    return (x[:1].upper() + x[1:]) if x else "Lembrete"

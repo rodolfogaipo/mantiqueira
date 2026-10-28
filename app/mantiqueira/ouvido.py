@@ -213,7 +213,7 @@ class Ouvido:
         self.modo = "ocupado"
 
     def liberar(self):
-        # descarta o que foi captado enquanto a Mantiqueira falava, para ela não ouvir a si mesma
+        # descarta o que foi captado enquanto o Mantiqueira falava, para ele não ouvir a si mesma
         while not self.q.empty():
             try:
                 self.q.get_nowait()

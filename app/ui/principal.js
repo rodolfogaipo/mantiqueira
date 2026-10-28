@@ -26,7 +26,7 @@
   var DIAS = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
   function relogio(){
     var d = new Date();
-    $('hm').textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    $('relHM').textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
     $('sec').textContent = ':' + String(d.getSeconds()).padStart(2,'0');
     $('data').textContent = DIAS[d.getDay()] + ' ' + String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0') + '.' + d.getFullYear();
   }
@@ -90,7 +90,7 @@
 
   function render(e){
     ultimo = e;
-    aplicarTema(e.tema);
+    if ($('ovCfg').hidden) aplicarTema(e.tema);
     estadoAtual = e.estado;
     palco.classList.toggle('rapido', e.estado === 'pensando' || e.estado === 'transcrevendo');
     $('stCpu').textContent = e.cpu + '%';
@@ -118,7 +118,9 @@
         var sub = falta(l.quando) + (l.repetir ? ' · ' + (REP[l.repetir] || '') : '');
         return '<div class="ag' + (k === 0 ? ' prox' : '') + '"><div class="t' + (k === 0 ? ' aglow' : '') + '">' + esc(l.hora) +
                '<span class="dia">' + esc(l.dia) + '</span></div><div style="min-width:0"><div class="n">' + esc(l.texto) + '</div>' +
-               barra + '<div class="s">' + esc(sub) + '</div></div></div>';
+               barra + '<div class="s">' + esc(sub) + '</div><div class="agb">' +
+               '<button type="button" class="mini-b" data-lid="' + l.id + '" data-acao="concluir">FEITO</button>' +
+               '<button type="button" class="mini-b" data-lid="' + l.id + '" data-acao="cancelar">APAGAR</button></div></div></div>';
       }).join('');
     }
 
@@ -190,6 +192,12 @@
     chamar('enviar', t);
   });
   $('bMic').addEventListener('click', function(){ chamar('ouvir'); });
+  $('agenda').addEventListener('click', function(ev){
+    var b = ev.target.closest('[data-lid]');
+    if (!b) return;
+    b.closest('.ag').style.opacity = '.3';
+    chamar('lembrete', Number(b.getAttribute('data-lid')), b.getAttribute('data-acao'));
+  });
   $('alOk').addEventListener('click', function(){ if (ultimo && ultimo.alerta) chamar('lembrete', ultimo.alerta.id, 'concluir'); $('alerta').hidden = true; });
   $('alAdiar').addEventListener('click', function(){ if (ultimo && ultimo.alerta) chamar('lembrete', ultimo.alerta.id, 'adiar'); $('alerta').hidden = true; });
   function pend(acao){ if (ultimo && ultimo.pendencias && ultimo.pendencias[0]) chamar('pendencia', ultimo.pendencias[0].id, acao); }
@@ -224,7 +232,7 @@
       return '<button type="button" class="tm" data-t="' + n + '" aria-pressed="' + (n === temaEscolhido) + '"><i style="background:' + TEMAS[n].p + '"></i>' + n + '</button>';
     }).join('');
     $('cTemas').querySelectorAll('.tm').forEach(function(b){
-      b.addEventListener('click', function(){ temaEscolhido = b.getAttribute('data-t'); temaAtual = null; aplicarTema(temaEscolhido); pintarTemas(); });
+      b.addEventListener('click', function(){ temaEscolhido = b.getAttribute('data-t'); temaAtual = null; aplicarTema(temaEscolhido); pintarTemas(); chamar('salvar_config', {tema: temaEscolhido}); });
     });
   }
   $('bCfg').addEventListener('click', function(){

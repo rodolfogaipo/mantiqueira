@@ -64,7 +64,7 @@ def _():
                         break
             except Exception:
                 time.sleep(1)
-        corpo = {"messages": [{"role": "system", "content": "Você é a Mantiqueira. AGORA: quarta-feira, 28 de outubro de 2026, 10:00. Responda em JSON com resposta, acao (nenhuma|criar_lembrete), quando (AAAA-MM-DD HH:MM) e texto."},
+        corpo = {"messages": [{"role": "system", "content": "Você é o Mantiqueira. AGORA: quarta-feira, 28 de outubro de 2026, 10:00. Responda em JSON com resposta, acao (nenhuma|criar_lembrete), quando (AAAA-MM-DD HH:MM) e texto."},
                               {"role": "user", "content": "me lembra amanhã às 9 de ligar pro fornecedor"}],
                  "max_tokens": 150, "temperature": 0.2,
                  "response_format": {"type": "json_object", "schema": ESQUEMA}}
@@ -118,6 +118,62 @@ def _():
     t = Transcritor()
     t.carregar()
     t.transcrever(np.zeros(16000, dtype=np.float32))
+
+
+@etapa("conversas de teste (secretário)")
+def _():
+    import datetime as dt
+    from mantiqueira import paths
+    from mantiqueira.ia import IA, PORTA
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.cerebro import Cerebro
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config()
+    n.cfg.atualizar({"tratamento": "senhor", "nome": "Rodolfo"})
+    n.db = Banco(paths.DADOS / "teste_conversa.db")
+    n.olhos = None
+    n.latencia = None
+    n.mostrar_mini_seguro = lambda *a, **k: None
+    n.ia = IA(n)
+    p = subprocess.Popen([str(paths.LLAMA_CPU), "-m", str(paths.LLM_NORMAL), "--host", "127.0.0.1",
+                          "--port", str(PORTA), "-c", "8192", "-ngl", "0"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(240):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{PORTA}/health", timeout=2) as r:
+                    if b"ok" in r.read():
+                        break
+            except Exception:
+                time.sleep(1)
+        n.ia.pronta = True
+        c = Cerebro(n)
+        relato = []
+
+        def diz(frase):
+            r = c.processar(frase)
+            lem = n.db.lembretes_proximos(20)
+            relato.append(f"VOCÊ: {frase} → MANTIQUEIRA: {r} [lembretes: {len(lem)}; trato: {n.cfg['tratamento']}]")
+            return r, lem
+
+        diz("fale Leandrinho vá trabalhar")
+        diz("me chame de doutor")
+        diz("tudo bem com você?")
+        diz("me lembra de ligar pro fornecedor")
+        r, lem = diz("amanhã às 9")
+        diz("me lembra daqui a 10 minutos de tirar o café")
+        diz("tenho uma reunião sexta")
+        for l in n.db.lembretes_proximos(20):
+            relato.append(f"LEMBRETE: {l['quando']} — {l['texto']} {l['repetir']}")
+        texto = " %0A".join(x.replace("%", "%25").replace("\n", " ") for x in relato)
+        print("\n".join(relato), flush=True)
+        print("::notice title=Conversas de teste::" + texto[:3800], flush=True)
+    finally:
+        p.kill()
 
 
 if falhas:

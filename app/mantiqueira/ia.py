@@ -48,8 +48,8 @@ class IA:
             return 0
         tam = arquivo.stat().st_size / 2**20
         n = CAMADAS.get(qual, 32)
-        livre = g["livre"] - 450                 # folga para o Windows e o SolidWorks
-        precisa = tam + 550                      # modelo + contexto
+        livre = g["livre"] - 900                 # folga para o Windows, a voz e o SolidWorks
+        precisa = tam + 650                      # modelo + contexto
         if livre >= precisa:
             return 99
         por_camada = tam / (n + 2)

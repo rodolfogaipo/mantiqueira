@@ -46,7 +46,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .ph{display:flex;align-items:center;gap:10px;font-family:var(--f-mono);font-size:12px;letter-spacing:3px;color:var(--p)}
 .ph .ln{flex:1;height:1px;background:linear-gradient(90deg,var(--p2),transparent)}
 
-.agenda{margin-top:16px;display:flex;flex-direction:column;gap:14px;max-height:340px;overflow:hidden}
+.agenda{margin-top:16px;display:flex;flex-direction:column;gap:14px;max-height:360px;overflow-y:auto;overflow-x:hidden}
 .ag{display:grid;grid-template-columns:86px minmax(0,1fr);gap:10px;align-items:start}
 .ag .t{font-family:var(--f-disp);font-size:16px;color:var(--tx);padding-top:2px}
 .ag .dia{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:2px;color:var(--mu);margin-top:2px}
@@ -54,6 +54,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .ag .s{font-family:var(--f-mono);font-size:11px;color:var(--mu);letter-spacing:1px}
 .ag.prox .t{color:var(--al)} .ag.prox .n{color:var(--hi);font-weight:600}
 .barra{display:flex;gap:2px;margin-top:6px}.barra span{height:4px}
+.agb{display:flex;gap:6px;margin-top:6px;opacity:0;transition:opacity .15s}
+.ag:hover .agb,.ag:focus-within .agb{opacity:1}
+.mini-b{min-height:26px;padding:0 10px;background:transparent;border:1px solid var(--p3);color:var(--tx);font-family:var(--f-mono);font-size:10px;letter-spacing:2px;cursor:pointer}
+.mini-b:hover{border-color:var(--al);color:var(--hi)}
 .vazio{font-size:15px;color:var(--mu);line-height:1.45}
 .vazio b{color:var(--tx);font-weight:500}
 
