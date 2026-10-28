@@ -202,7 +202,6 @@ def _():
 
 @etapa("busca de arquivos, memória e curiosidades")
 def _():
-    import tempfile
     from mantiqueira import paths
     from mantiqueira.config import Config
     from mantiqueira.db import Banco
@@ -223,7 +222,7 @@ def _():
     n.indice = Indice(n)
     n.memoria = Memoria(n)
     n.frases = Frases(n.db)
-    pasta = Path(tempfile.mkdtemp())
+    pasta = paths.DADOS / "teste_busca"          # fora da pasta Temp do Windows, que o mapa ignora de propósito
     for nome in ("Mesa Luna Oval 2,80X1,20.SLDASM", "Poltrona Balanço Brisa.SLDASM", "Orçamento Cliente Silva.xlsx"):
         (pasta / "Projetos" / "Móveis").mkdir(parents=True, exist_ok=True)
         (pasta / "Projetos" / "Móveis" / nome).write_bytes(b"x")
