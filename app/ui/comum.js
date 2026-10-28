@@ -65,7 +65,15 @@ var EXEMPLO = {
   gravar_voz: function(){ return Promise.resolve(true); }, usar_arquivo_voz: function(){ return Promise.resolve(false); },
   lembrete: function(){ return Promise.resolve(true); }, pendencia: function(){ return Promise.resolve(true); },
   fechar_alerta: function(){ return Promise.resolve(true); }, esconder_mini: function(){ return Promise.resolve(true); },
-  mostrar_principal: function(){ return Promise.resolve(true); }, abrir_dados: function(){ return Promise.resolve(true); }
+  mostrar_principal: function(){ return Promise.resolve(true); }, abrir_dados: function(){ return Promise.resolve(true); },
+  conhecimento: function(){ return Promise.resolve({status:'Aprendido: Catalogo_Chapas_2026.pdf.', docs:[
+    {id:9,nome:'Catalogo_Chapas_2026.pdf (exemplo)',origem:'usuario',paginas:48,trechos:131},
+    {id:8,nome:'Tabela_dobra_aco_carbono.pdf (exemplo)',origem:'usuario',paginas:3,trechos:7},
+    {id:1,nome:'SolidWorks 2025',origem:'guia',trechos:13},{id:2,nome:'AutoCAD 2025',origem:'guia',trechos:11},
+    {id:3,nome:'SketchUp 2023',origem:'guia',trechos:7},{id:4,nome:'3ds Max 2025',origem:'guia',trechos:7},
+    {id:5,nome:'Aspire 12',origem:'guia',trechos:6},{id:6,nome:'CypCut laser',origem:'guia',trechos:5},
+    {id:7,nome:'Office Excel Word PowerPoint',origem:'guia',trechos:6}]}); },
+  conhecimento_adicionar: function(){ return Promise.resolve(false); }, conhecimento_remover: function(){ return Promise.resolve(true); }
 };
 
 var ROTULO_ESTADO = {carregando:'CARREGANDO', ocioso:'ESCUTANDO', gravando:'OUVINDO VOCÊ', transcrevendo:'ENTENDENDO',

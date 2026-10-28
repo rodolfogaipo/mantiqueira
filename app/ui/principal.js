@@ -1,10 +1,24 @@
 /* Mantiqueira — tela principal */
 (function(){
   var palco = $('palco');
+  /* O palco tem 900 de altura e largura variável: em telas mais largas que 16:10 ele estica para os lados. */
   function escalar(){
-    var s = Math.min(window.innerWidth / 1440, window.innerHeight / 900);
-    var x = (window.innerWidth - 1440*s) / 2, y = (window.innerHeight - 900*s) / 2;
-    palco.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    var iw = window.innerWidth, ih = window.innerHeight, s, W, y = 0;
+    if (iw / ih >= 1440 / 900){ s = ih / 900; W = Math.max(1440, Math.ceil(iw / s)); }
+    else { s = iw / 1440; W = 1440; y = (ih - 900*s) / 2; }
+    var dx = W - 1440, m = dx / 2;
+    palco.style.width = W + 'px';
+    palco.style.setProperty('--dx', dx + 'px');
+    palco.style.transform = 'translate(0px,' + y + 'px) scale(' + s + ')';
+    var f = $('fundo');
+    f.setAttribute('width', W); f.setAttribute('viewBox', '0 0 ' + W + ' 900');
+    $('hexRet').setAttribute('width', W); $('mascRet').setAttribute('width', W);
+    $('ln1').setAttribute('d', 'M370 196 H' + (430+m) + ' L' + (470+m) + ' 236 H' + (528+m));
+    $('ln2').setAttribute('d', 'M370 540 H' + (440+m) + ' L' + (478+m) + ' 502 H' + (540+m));
+    $('ln3').setAttribute('d', 'M' + (1060+dx) + ' 210 H' + (1010+dx) + ' L' + (970+dx) + ' 250 H' + (912+m));
+    $('linhaPend').setAttribute('d', 'M' + (1060+dx) + ' 520 H' + (1010+dx) + ' L' + (975+dx) + ' 545 H' + (898+m));
+    [['pt1',528+m,236],['pt2',540+m,502],['pt3',912+m,250],['pt4',898+m,545]].forEach(function(p){ $(p[0]).setAttribute('cx', p[1]); $(p[0]).setAttribute('cy', p[2]); });
+    $('cantoD').setAttribute('d', 'M' + (W-60) + ' 20 H' + (W-20) + ' V60 M' + (W-60) + ' 880 H' + (W-20) + ' V840');
   }
   window.addEventListener('resize', escalar); escalar();
 
@@ -148,6 +162,7 @@
     var pd = e.pendencias || [];
     $('pendBox').hidden = !pd.length;
     $('linhaPend').style.display = pd.length ? '' : 'none';
+    $('pt4').style.display = pd.length ? '' : 'none';
     if (pd.length){
       $('pendTxt').textContent = pd[0].texto;
       $('pendN').textContent = pd.length > 1 ? '+' + (pd.length - 1) : '';
@@ -209,7 +224,7 @@
     b.addEventListener('click', function(){ $(b.getAttribute('data-fechar')).hidden = true; });
   });
   document.addEventListener('keydown', function(ev){
-    if (ev.key === 'Escape'){ $('ovHist').hidden = true; $('ovCfg').hidden = true; }
+    if (ev.key === 'Escape'){ $('ovHist').hidden = true; $('ovCfg').hidden = true; $('ovCon').hidden = true; }
   });
 
   /* histórico */
@@ -223,6 +238,37 @@
       }).join('') || '<div class="vazio">Nenhuma conversa ainda.</div>';
       var h = $('histLista'); h.parentNode.scrollTop = h.parentNode.scrollHeight;
     });
+  });
+
+  /* base de conhecimento */
+  var conTimer = null;
+  function pintarCon(){
+    chamar('conhecimento').then(function(c){
+      var docs = (c.docs || []), meus = docs.filter(function(d){ return d.origem === 'usuario'; }),
+          guias = docs.filter(function(d){ return d.origem === 'guia'; });
+      $('conStatus').textContent = c.status || '';
+      $('conN').textContent = meus.length ? String(meus.length).padStart(2, '0') : '';
+      $('conDocs').innerHTML = meus.length ? meus.map(function(d){
+        var info = (d.paginas ? d.paginas + ' PÁG · ' : '') + d.trechos + ' TRECHOS';
+        return '<div class="doc"><span class="dn" title="' + esc(d.nome) + '">' + esc(d.nome) + '</span><span class="di">' + info +
+               '</span><button type="button" class="mini-b" data-doc="' + d.id + '">REMOVER</button></div>';
+      }).join('') : '<div class="vazio">Nenhum documento ainda. Clique em <b>ADICIONAR ARQUIVOS</b>.</div>';
+      $('conGuias').innerHTML = guias.map(function(d){
+        return '<div class="doc"><span class="dn">' + esc(d.nome) + '</span><span class="di">' + d.trechos + ' TRECHOS</span><span class="di">EMBUTIDO</span></div>';
+      }).join('');
+    });
+  }
+  $('bCon').addEventListener('click', function(){
+    $('ovCon').hidden = false; pintarCon();
+    clearInterval(conTimer);
+    conTimer = setInterval(function(){ if ($('ovCon').hidden) clearInterval(conTimer); else pintarCon(); }, 1500);
+  });
+  $('conAdd').addEventListener('click', function(){ chamar('conhecimento_adicionar').then(pintarCon); });
+  $('conDocs').addEventListener('click', function(ev){
+    var b = ev.target.closest('[data-doc]');
+    if (!b) return;
+    if (b.getAttribute('data-ok') !== '1'){ b.setAttribute('data-ok', '1'); b.textContent = 'CONFIRMAR?'; return; }
+    chamar('conhecimento_remover', Number(b.getAttribute('data-doc'))).then(pintarCon);
   });
 
   /* configurações */

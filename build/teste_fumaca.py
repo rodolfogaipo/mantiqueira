@@ -120,6 +120,47 @@ def _():
     t.transcrever(np.zeros(16000, dtype=np.float32))
 
 
+def pdf_simples(caminho, linhas):
+    """Gera um PDF mínimo com texto (sem bibliotecas), para testar a leitura."""
+    conteudo = "BT /F1 12 Tf 50 750 Td 16 TL " + " ".join(f"({l}) Tj T*" for l in linhas) + " ET"
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+            f"<< /Length {len(conteudo)} >>\nstream\n{conteudo}\nendstream",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, pos = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        pos.append(len(out))
+        out += f"{i} 0 obj\n{o}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{p:010d} 00000 n \n".encode() for p in pos)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    Path(caminho).write_bytes(out)
+
+
+@etapa("base de conhecimento (guias e PDF)")
+def _():
+    from mantiqueira import paths
+    from mantiqueira.conhecimento import Conhecimento
+    import pypdfium2  # noqa
+    k = Conhecimento()
+    assert k.fts, "busca de texto completo (FTS5) indisponível"
+    k.importar_guias()
+    guias = [d["nome"] for d in k.listar()]
+    assert len(guias) >= 7, guias
+    r = k.buscar("como exporto o dxf da chapa planificada no solidworks?")
+    assert r and "SolidWorks" in r[0]["nome"], r
+    pdf = paths.DADOS / "Tabela de dobra teste.pdf"
+    pdf_simples(pdf, ["Tabela de dobra da empresa", "Chapa 2 mm aco carbono: raio interno 2 mm, fator K 0,42",
+                      "Chapa 3 mm aco carbono: raio interno 3 mm, fator K 0,44"])
+    nome, pag, tre = k.adicionar(pdf)
+    assert tre >= 1, (nome, pag, tre)
+    r = k.buscar("qual o fator K da chapa 3 mm?")
+    assert r and "Tabela de dobra" in r[0]["nome"], r
+    print("::notice title=Conhecimento::guias=" + ", ".join(guias) + " | PDF lido e encontrado: " +
+          r[0]["texto"].replace("\n", " ")[:200], flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt
@@ -167,6 +208,11 @@ def _():
         r, lem = diz("amanhã às 9")
         diz("me lembra daqui a 10 minutos de tirar o café")
         diz("tenho uma reunião sexta")
+        from mantiqueira.conhecimento import Conhecimento
+        n.conhecimento = Conhecimento()
+        n.conhecimento.importar_guias()
+        diz("qual o atalho da vista isométrica no SolidWorks?")
+        diz("como apago linhas duplicadas no AutoCAD antes de mandar pro laser?")
         for l in n.db.lembretes_proximos(20):
             relato.append(f"LEMBRETE: {l['quando']} — {l['texto']} {l['repetir']}")
         texto = " %0A".join(x.replace("%", "%25").replace("\n", " ") for x in relato)

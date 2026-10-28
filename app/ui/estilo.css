@@ -13,6 +13,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .palco{position:absolute;left:0;top:0;width:1440px;height:900px;transform-origin:0 0;overflow:hidden;
   background:radial-gradient(ellipse 70% 60% at 50% 42%,var(--bg1) 0%,var(--bg2) 55%,#000 100%)}
 .abs{position:absolute}
+.meio{translate:calc(var(--dx, 0px) / 2) 0}
+.dir{translate:var(--dx, 0px) 0}
 .mono{font-family:var(--f-mono)}
 .disp{font-family:var(--f-disp)}
 .mu{color:var(--mu)} .al{color:var(--al)}
@@ -80,7 +82,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .eq div{width:4px;transform-origin:center;transform:scaleY(.25);transition:transform .12s}
 .conversa{margin-top:8px;text-align:center;min-height:62px}
 .uline{font-size:13px;color:var(--mu);letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.aline{font-size:18px;font-weight:500;color:var(--hi);margin-top:6px;line-height:1.35;max-height:74px;overflow:hidden}
+.aline{font-size:18px;font-weight:500;color:var(--hi);margin-top:6px;line-height:1.35;max-height:100px;overflow-y:auto}
 .cmd{margin-top:12px;display:flex;align-items:center;gap:10px;padding:0 6px 0 16px;height:50px;border:1px solid var(--p2);
   background:linear-gradient(90deg,rgba(var(--gl),.12),rgba(var(--gl),.03));clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)}
 .cmd .seta{color:var(--p);font-size:16px}
@@ -90,7 +92,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .ib.ativo{background:var(--al);border-color:var(--al);color:#000}
 .ibP{background:var(--p);border:0;color:#000}
 
-.rodape{left:40px;right:40px;bottom:18px;display:flex;justify-content:space-between;gap:24px;font-size:11px;letter-spacing:2px;color:var(--mu)}
+.rodape{left:70px;right:70px;bottom:22px;display:flex;justify-content:space-between;gap:24px;font-size:11px;letter-spacing:2px;color:var(--mu)}
 .boot{left:470px;width:500px;top:640px;text-align:center;font-size:12px;letter-spacing:2px;color:var(--al)}
 
 .alerta{left:470px;top:250px;width:500px;padding:24px 28px;background:rgba(3,10,28,.94);border:1px solid var(--al);
@@ -106,6 +108,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .hist .u{align-self:flex-end;background:rgba(var(--gl),.1);border:1px solid var(--p3);color:var(--hi)}
 .hist .a{align-self:flex-start;border-left:2px solid var(--p);color:var(--tx)}
 .hist .q{font-family:var(--f-mono);font-size:10px;color:var(--mu);letter-spacing:1px;margin-bottom:4px}
+.conInfo{margin:16px 0;font-size:15px;line-height:1.5;color:var(--tx);max-width:820px}
+.conInfo b{color:var(--hi);font-weight:600}.conInfo i{color:var(--mu)}
+.conStatus{font-size:12px;letter-spacing:1px;flex:1;min-width:0}
+.conLista{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.doc{display:grid;grid-template-columns:minmax(0,1fr) 150px 110px;gap:12px;align-items:center;padding:8px 12px;border:1px solid var(--p3);background:rgba(var(--gl),.04)}
+.doc .dn{font-size:15px;color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc .di{font-family:var(--f-mono);font-size:11px;color:var(--mu);letter-spacing:1px}
 .cfg{margin-top:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
 .col{display:flex;flex-direction:column;gap:16px}
 .campo{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--mu)}

@@ -41,6 +41,7 @@ class Nucleo:
         self.pronto = False
         self.erros = []
         self.ia = self.voz = self.ouvido = self.transcritor = self.olhos = self.cerebro = self.rotinas = None
+        self.conhecimento = None
         self.latencia = None
         self.alerta = None
         self.janelas = {"main": None, "mini": None}
@@ -89,6 +90,12 @@ class Nucleo:
             self.voz = Voz(self, self._voz_inicio, self._voz_fim)
             self.voz.carregar()
         self._passo("Carregando a voz…", voz)
+
+        def conhecimento():
+            from .conhecimento import Conhecimento
+            self.conhecimento = Conhecimento()
+            self.conhecimento.importar_guias()
+        self._passo("Carregando a base de conhecimento…", conhecimento)
 
         self.cerebro = Cerebro(self)
 
@@ -253,6 +260,27 @@ class Nucleo:
                 continue
             if self.estado == "ocioso" and time.time() > self._esconder_em:
                 self.mostrar_mini_seguro(False)
+
+    # ================================================================== base de conhecimento
+    def adicionar_documentos(self, caminhos):
+        base = self.conhecimento
+        if not base:
+            return
+        feitos, erros = [], []
+        for c in caminhos:
+            base.status = f"Lendo {os.path.basename(c)}…"
+            try:
+                nome, pag, tre = base.adicionar(c)
+                feitos.append(nome if tre >= 0 else nome + " (já estava na base)")
+            except Exception as e:
+                log.exception("documento %s", c)
+                erros.append(f"{os.path.basename(c)}: {e}")
+        msg = ""
+        if feitos:
+            msg += "Aprendido: " + ", ".join(feitos) + ". "
+        if erros:
+            msg += "Não consegui ler: " + "; ".join(erros)
+        base.status = msg.strip()
 
     # ================================================================== voz personalizada
     def gravar_voz_personalizada(self):

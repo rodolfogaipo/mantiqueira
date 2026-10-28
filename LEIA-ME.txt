@@ -42,6 +42,14 @@ PRIMEIRA ABERTURA
 - Para criar uma voz personalizada, use "GRAVAR 20 S" e leia qualquer texto
   em voz alta. Use apenas a voz de quem autorizar.
 
+BASE DE CONHECIMENTO
+- Botão CONHECIMENTO > ADICIONAR ARQUIVOS: suba PDFs (até escaneados),
+  Word (.docx) ou texto. Ele lê, guarda neste computador e consulta antes
+  de responder. Já vem com guias de SolidWorks 2025, AutoCAD 2025,
+  SketchUp 2023, 3ds Max 2025, Aspire 12, CypCut e Office.
+- Exemplos: "qual o atalho da vista isométrica no Solid?",
+  "como apago linhas duplicadas no AutoCAD?", "qual o fator K da chapa 3 mm?"
+
 PRIVACIDADE
 - Nada sai do computador. Tudo fica na pasta "dados" da instalação.
 - Janelas com palavras como "banco" ou "senha" não são registradas

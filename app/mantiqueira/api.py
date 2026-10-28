@@ -87,6 +87,31 @@ class Api:
         os.startfile(str(paths.DADOS))
         return True
 
+    # --------------------------------------------------------------- base de conhecimento
+    def conhecimento(self):
+        base = self._n.conhecimento
+        if not base:
+            return {"docs": [], "status": "Carregando…"}
+        return {"docs": base.listar(), "status": base.status}
+
+    def conhecimento_adicionar(self):
+        import webview
+        w = self._n.janelas.get("main")
+        if not w:
+            return False
+        tipo = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+        r = w.create_file_dialog(tipo, allow_multiple=True,
+                                 file_types=("Documentos (*.pdf;*.txt;*.md;*.docx)", "Todos os arquivos (*.*)"))
+        if not r:
+            return False
+        if self._n.conhecimento:
+            self._n.conhecimento.status = f"Lendo {len(r)} arquivo(s)…"
+        threading.Thread(target=self._n.adicionar_documentos, args=(list(r),), daemon=True).start()
+        return True
+
+    def conhecimento_remover(self, doc_id):
+        return bool(self._n.conhecimento and self._n.conhecimento.remover(int(doc_id)))
+
     # --------------------------------------------------------------- configurações
     def config(self):
         n = self._n
@@ -140,7 +165,8 @@ class Api:
         import webview
         from .voz import VOZ_PERSONALIZADA_WAV
         w = self._n.janelas.get("main")
-        r = w.create_file_dialog(webview.OPEN_DIALOG, file_types=("Áudio WAV (*.wav)",)) if w else None
+        tipo = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+        r = w.create_file_dialog(tipo, file_types=("Áudio WAV (*.wav)",)) if w else None
         if not r:
             return False
         shutil.copyfile(r[0], VOZ_PERSONALIZADA_WAV)
