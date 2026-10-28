@@ -47,17 +47,16 @@ class Nucleo:
         self.indice = self.memoria = self.frases = self.sistemas = self.intencoes = None
         self.detalhe_texto = ""          # lista de caminhos etc. mostrada na tela junto da resposta
         self.contexto_extra = ""
-        self.janelas["barra"] = None
         self.latencia = None
         self.alerta = None
-        self.janelas = {"main": None, "mini": None}
+        self.janelas = {"main": None, "mini": None, "barra": None}
         self.mini_visivel = False
         self._mini_motivo = None
         self._esconder_em = 0
         self._reouvir = False
         self._por_voz = False
         self.aviso_gravacao = ""
-        self.ultima = {"usuario": "", "assistente": ""}
+        self.ultima = {"usuario": "", "assistente": "", "detalhe": ""}
         for r in self.db.conversa_ultimas(2):
             self.ultima["usuario" if r["papel"] == "usuario" else "assistente"] = r["texto"]
 

@@ -48,6 +48,11 @@ def _():
     from mantiqueira import config, db, textutil, sistema, ia, ouvido, voz, olhos, tela, cerebro, rotinas, nucleo, api  # noqa
     from mantiqueira import indice, leitor, sistemas_web, memoria, frases, intencoes, holo  # noqa
     import pystray  # noqa
+    n = nucleo.Nucleo()                      # o mesmo que o programa faz ao abrir
+    a = api.Api(n)
+    e = a.estado()
+    assert "boot" in e or "pronto" in e, e
+    a.config()
 
 
 @etapa("IA local responde em JSON")
