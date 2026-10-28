@@ -1,0 +1,50 @@
+MANTIQUEIRA — assistente pessoal 100% offline
+==============================================
+
+COMO INSTALAR
+1. Num computador COM internet, abra a aba "Releases" do repositório no GitHub
+   e baixe TODOS os arquivos da versão mais nova para uma mesma pasta:
+     - Instalar-Mantiqueira.exe
+     - manifesto.json
+     - Mantiqueira.zip.001, .002, .003 ... (todas as partes)
+     - Mantiqueira-Turbo.zip.001 ... (OPCIONAL: modo Turbo, IA maior)
+2. Copie essa pasta inteira para um pendrive (16 GB ou mais).
+3. No computador da Mantiqueira, copie a pasta do pendrive para o disco
+   e dê dois cliques em Instalar-Mantiqueira.exe.
+4. Ao terminar, aparece o atalho "Mantiqueira" na Área de Trabalho.
+   Depois de instalar, a pasta baixada pode ser apagada.
+
+Se o Windows mostrar "O Windows protegeu o computador", clique em
+"Mais informações" e depois em "Executar assim mesmo" (o programa não é
+assinado digitalmente, por isso o aviso).
+
+COMO USAR
+- Diga "Mantiqueira" e, depois do bipe, fale o que quer.
+- Ou aperte Ctrl + Espaço (em qualquer programa) e fale.
+- Ou digite na caixa embaixo da tela.
+- Exemplos:
+    "Mantiqueira, me lembra às 11 de enviar o DXF pro corte"
+    "me lembra toda quarta às 14 da reunião da equipe"
+    "em qual arquivo eu estava ontem no fim da tarde?"
+    "abre a montagem da pérgola"
+    "anota que a medida da viga é 3200"
+    "o que está escrito na minha tela?"
+    "o que eu tenho pra hoje?"
+
+PRIMEIRA ABERTURA
+- Leva cerca de 1 minuto para carregar a IA e a voz.
+- Abra CONFIGURAÇÕES para escolher a voz (botão TESTAR), o microfone e a cor.
+- Para criar uma voz personalizada, use "GRAVAR 20 S" e leia qualquer texto
+  em voz alta. Use apenas a voz de quem autorizar.
+
+PRIVACIDADE
+- Nada sai do computador. Tudo fica na pasta "dados" da instalação.
+- Janelas com palavras como "banco" ou "senha" não são registradas
+  (a lista pode ser alterada nas Configurações).
+
+SE ALGO DER ERRADO
+- Os registros ficam em dados\mantiqueira.log e dados\ia.log.
+  Mande esses arquivos (ou um print) para corrigir.
+
+Modelos usados (uso pessoal): Qwen2.5 (Alibaba), XTTS-v2 (Coqui, licença não
+comercial), Whisper (OpenAI, via faster-whisper), Vosk, Piper.

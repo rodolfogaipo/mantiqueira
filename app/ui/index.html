@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantiqueira</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div id="palco" class="palco">
+
+<svg class="abs" style="inset:0" width="1440" height="900" viewBox="0 0 1440 900" aria-hidden="true">
+  <defs>
+    <pattern id="hex" width="28" height="48.5" patternUnits="userSpaceOnUse" patternTransform="scale(1.1)"><path d="M14 0 L28 8.1 L28 24.2 L14 32.3 L0 24.2 L0 8.1 Z M14 32.3 L14 48.5" fill="none" style="stroke:var(--p3)" stroke-width=".6"/></pattern>
+    <radialGradient id="fade" cx="50%" cy="42%" r="60%"><stop offset="0%" stop-color="#fff" stop-opacity=".5"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <mask id="hm"><rect width="1440" height="900" fill="url(#fade)"/></mask>
+  </defs>
+  <rect width="1440" height="900" fill="url(#hex)" mask="url(#hm)"/>
+  <g fill="none" stroke-width="1" style="stroke:var(--p2);opacity:.6">
+    <path d="M370 196 H430 L470 236 H528"/><path d="M370 540 H440 L478 502 H540"/><path d="M1060 210 H1010 L970 250 H912"/>
+  </g>
+  <circle cx="528" cy="236" r="3" style="fill:var(--p)"/><circle cx="540" cy="502" r="3" style="fill:var(--p)"/><circle cx="912" cy="250" r="3" style="fill:var(--p)"/>
+  <path id="linhaPend" d="M1060 520 H1010 L975 545 H898" fill="none" stroke-width="1" style="stroke:var(--al);opacity:.7"/>
+  <g fill="none" stroke-width="2" style="stroke:var(--p)"><path d="M20 60 V20 H60"/><path d="M1380 20 H1420 V60"/><path d="M20 840 V880 H60"/><path d="M1380 880 H1420 V840"/></g>
+</svg>
+<div class="varredura"></div>
+
+<header class="abs topo">
+  <div class="marca">
+    <svg width="40" height="28" viewBox="0 0 40 28" aria-hidden="true"><path d="M1 26 L11 12 L17 18 L26 4 L39 26 Z" fill="none" style="stroke:var(--p)" stroke-width="1.6" stroke-linejoin="round"/><path d="M22 10 L26 4 L30 11" fill="none" style="stroke:var(--hi)" stroke-width="1.6"/></svg>
+    <div>
+      <div class="disp brilho nome">MANTIQUEIRA</div>
+      <div class="mono subnome">NÚCLEO NEURAL LOCAL // OFFLINE</div>
+    </div>
+  </div>
+  <div class="mono stats">
+    <span>CPU <b id="stCpu">—</b></span>
+    <span>RAM <b id="stRam">—</b></span>
+    <span>VRAM <b id="stGpu">—</b></span>
+    <span>IA <b id="stModo">—</b></span>
+    <button type="button" class="chip" id="bHist">HISTÓRICO</button>
+    <button type="button" class="chip" id="bCfg">CONFIGURAÇÕES</button>
+  </div>
+  <div class="relogio">
+    <div class="disp brilho hora"><span id="hm">--:--</span><span id="sec" class="seg">:--</span></div>
+    <div class="mono data" id="data">—</div>
+  </div>
+</header>
+
+<svg class="abs hsvg" style="left:420px;top:80px" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Núcleo da Mantiqueira">
+  <defs>
+    <radialGradient id="cg" cx="50%" cy="50%" r="50%"><stop offset="0%" style="stop-color:var(--hi);stop-opacity:.85"/><stop offset="28%" style="stop-color:var(--p);stop-opacity:.4"/><stop offset="70%" style="stop-color:var(--p3);stop-opacity:.15"/><stop offset="100%" style="stop-color:var(--p3);stop-opacity:0"/></radialGradient>
+    <linearGradient id="swg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" style="stop-color:var(--p);stop-opacity:0"/><stop offset="100%" style="stop-color:var(--p);stop-opacity:.3"/></linearGradient>
+    <path id="lbl" d="M300 300 m-240 0 a240 240 0 1 1 480 0 a240 240 0 1 1 -480 0"/>
+  </defs>
+  <circle cx="300" cy="300" r="292" fill="none" style="stroke:var(--p3)" stroke-width=".8"/>
+  <g class="a4"><path id="tkO" style="stroke:var(--p)" stroke-width="1.2" fill="none"/></g>
+  <g class="a1"><text font-family="Share Tech Mono, Consolas, monospace" font-size="11" letter-spacing="4" style="fill:var(--p)"><textPath href="#lbl" id="anelTxt">ESCUTA ATIVA ··· PROCESSAMENTO 100% LOCAL ··· VOZ SINTETIZADA ··· VISÃO DE TELA ··· 0 BYTES ENVIADOS ··· </textPath></text></g>
+  <g class="a2"><circle cx="300" cy="300" r="222" fill="none" style="stroke:var(--p)" stroke-width="2" stroke-dasharray="160 40 6 40 90 60 20 400"/></g>
+  <circle cx="300" cy="300" r="200" fill="none" style="stroke:var(--pd)" stroke-width="16" stroke-dasharray="3 3"/>
+  <path id="arcM" style="stroke:var(--p)" stroke-width="16" fill="none" stroke-dasharray="3 3"/>
+  <path id="arcA" style="stroke:var(--al)" stroke-width="4" fill="none"/>
+  <g class="a3"><circle cx="300" cy="300" r="176" fill="none" style="stroke:var(--p2)" stroke-width="1" stroke-dasharray="40 10 4 10 4 10"/></g>
+  <g class="swp"><path d="M300 300 L300 140 A160 160 0 0 1 413 187 Z" fill="url(#swg)"/></g>
+  <path id="tkI" style="stroke:var(--p)" stroke-width="1" fill="none" opacity=".8"/>
+  <circle id="nucleoLuz" class="respira" cx="300" cy="300" r="140" fill="url(#cg)"/>
+  <circle cx="300" cy="300" r="118" fill="none" style="stroke:var(--p)" stroke-width="1.5"/>
+  <path d="M232 292 L256 262 L270 276 L294 236 L312 262 L326 250 L368 292" fill="none" style="stroke:var(--hi)" stroke-width="2" stroke-linejoin="round"/>
+  <line x1="222" y1="300" x2="378" y2="300" style="stroke:var(--p)" stroke-width="1" opacity=".6"/>
+  <text x="300" y="330" text-anchor="middle" font-family="Michroma, Eurostile, sans-serif" font-size="16" letter-spacing="4" style="fill:var(--hi)">MANTIQUEIRA</text>
+  <text id="coreTxt" x="300" y="352" text-anchor="middle" font-family="Share Tech Mono, Consolas, monospace" font-size="12" letter-spacing="4" style="fill:var(--p)">CARREGANDO</text>
+  <text id="coreSub" x="300" y="372" text-anchor="middle" font-family="Share Tech Mono, Consolas, monospace" font-size="10" letter-spacing="3" style="fill:var(--mu)"> </text>
+</svg>
+<div id="boot" class="abs mono boot" hidden></div>
+
+<section class="abs" style="left:40px;top:130px;width:330px">
+  <div class="ph"><span class="brilho">// AGENDA</span><span class="ln"></span><span id="agN" class="mu">00</span></div>
+  <div id="agenda" class="agenda"></div>
+</section>
+
+<section class="abs" style="left:40px;top:520px;width:330px">
+  <div class="ph"><span class="brilho">// SUBSISTEMAS</span><span class="ln"></span></div>
+  <div id="sys" class="sistemas"></div>
+</section>
+
+<section class="abs" style="left:1060px;top:130px;width:340px">
+  <div class="ph" style="letter-spacing:2px"><span class="brilho">// HOLOGRAMA · EM FOCO</span><span class="ln"></span><span id="rec" class="pisca al">● REC</span></div>
+  <div class="holo">
+    <svg class="hsvg" width="340" height="200" viewBox="0 0 340 200" role="img" aria-label="Holograma do que está em uso">
+      <ellipse cx="170" cy="168" rx="120" ry="18" fill="none" style="stroke:var(--p2)" stroke-width="1" opacity=".6"/>
+      <ellipse cx="170" cy="168" rx="90" ry="13" fill="none" style="stroke:var(--p3)" stroke-width="1" stroke-dasharray="3 4"/>
+      <path id="hB" fill="none" style="stroke:var(--p2)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>
+      <path id="hS" fill="none" style="stroke:var(--p)" stroke-width="1" opacity=".85"/>
+      <path id="hF" fill="none" style="stroke:var(--hi)" stroke-width="1.6"/>
+      <g font-family="Share Tech Mono, Consolas, monospace" font-size="9" letter-spacing="1" style="fill:var(--mu)"><text x="6" y="14" id="holoTipo">MODELO 3D</text><text x="282" y="14" id="rot">ROT 000°</text></g>
+    </svg>
+    <div class="linhaScan"></div>
+  </div>
+  <div class="mono rot2">APLICATIVO</div>
+  <div id="fApp" class="fapp">—</div>
+  <div id="fArq" class="mono aglow farq">—</div>
+  <div id="fInfo" class="mono finfo"> </div>
+</section>
+
+<section id="pendBox" class="abs" style="left:1060px;top:496px;width:340px" hidden>
+  <div class="ph al"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1 L13 13 H1 Z M7 5 V9 M7 10.5 V11.5" fill="none" style="stroke:var(--al)" stroke-width="1.4"/></svg><span class="aglow">PENDÊNCIA</span><span class="ln" style="background:linear-gradient(90deg,var(--al),transparent)"></span><span id="pendN" class="al"></span></div>
+  <div id="pendTxt" class="pendtxt"></div>
+  <div class="botoes">
+    <button type="button" class="btn btnA" id="pAbrir">ABRIR AGORA</button>
+    <button type="button" class="btn" id="pAdiar">LEMBRAR EM 1H</button>
+    <button type="button" class="btn" id="pOk">JÁ RESOLVI</button>
+  </div>
+</section>
+
+<section class="abs" style="left:1060px;top:672px;width:340px">
+  <div class="ph"><span class="brilho">// REGISTRO DE HOJE</span><span class="ln"></span></div>
+  <div id="reg" class="mono registro"></div>
+</section>
+
+<section class="abs" style="left:400px;width:640px;top:680px">
+  <div class="eq" id="eq" aria-hidden="true"></div>
+  <div class="conversa">
+    <div id="uLine" class="mono uline"> </div>
+    <div id="aLine" class="brilho aline"> </div>
+  </div>
+  <form id="cmdf" class="cmd" autocomplete="off">
+    <span class="mono brilho seta">›</span>
+    <label for="cmd" class="sr">Mensagem para a Mantiqueira</label>
+    <input id="cmd" type="text" placeholder="digite ou diga MANTIQUEIRA">
+    <button type="button" class="ib" id="bMic" aria-label="Falar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button type="submit" class="ib ibP" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></button>
+  </form>
+</section>
+
+<footer class="abs mono rodape">
+  <span id="rodE">■ MODO OFFLINE · NENHUM DADO SAI DESTE PC</span>
+  <span id="rodD">—</span>
+</footer>
+
+<div id="alerta" class="abs alerta" hidden>
+  <div class="mono al">LEMBRETE · <span id="alHora"></span></div>
+  <div id="alTxt" class="altxt"></div>
+  <div class="botoes">
+    <button type="button" class="btn btnA" id="alOk">CONCLUÍDO</button>
+    <button type="button" class="btn" id="alAdiar">ADIAR 10 MIN</button>
+  </div>
+</div>
+
+<div id="ovHist" class="abs over" hidden>
+  <div class="painel">
+    <div class="ph"><span class="brilho">// HISTÓRICO DA CONVERSA</span><span class="ln"></span><button type="button" class="chip" data-fechar="ovHist">FECHAR</button></div>
+    <div id="histLista" class="hist"></div>
+  </div>
+</div>
+
+<div id="ovCfg" class="abs over" hidden>
+  <div class="painel">
+    <div class="ph"><span class="brilho">// CONFIGURAÇÕES</span><span class="ln"></span><button type="button" class="chip" data-fechar="ovCfg">FECHAR</button></div>
+    <div class="cfg">
+      <div class="col">
+        <label class="campo"><span>Seu nome</span><input id="cNome" type="text"></label>
+        <label class="campo"><span>Como ela te chama</span><input id="cTrat" type="text" placeholder="senhor"></label>
+        <div class="campo"><span>Voz</span>
+          <div class="linha"><select id="cVoz"></select><button type="button" class="chip" id="cTestar">TESTAR</button></div>
+        </div>
+        <div class="campo"><span>Voz personalizada</span>
+          <div class="linha"><button type="button" class="chip" id="cGravar">GRAVAR 20 S</button><button type="button" class="chip" id="cArqVoz">USAR ARQUIVO .WAV</button></div>
+          <small id="cAviso" class="mu">Grave alguém que autorize o uso da própria voz. Fale de forma natural, sem barulho ao fundo.</small>
+        </div>
+        <label class="campo"><span>Microfone</span><select id="cMic"></select></label>
+        <label class="campo"><span>Modo da IA</span>
+          <select id="cModo"><option value="normal">Normal — rápida, convive com o SolidWorks</option><option value="turbo">Turbo — mais inteligente, um pouco mais lenta</option><option value="auto">Automático — turbo quando o SolidWorks estiver fechado</option></select>
+        </label>
+      </div>
+      <div class="col">
+        <label class="check"><input id="cAtiv" type="checkbox"><span>Acordar quando ouvir "Mantiqueira"</span></label>
+        <label class="check"><input id="cFalar" type="checkbox"><span>Responder falando (também quando eu digitar)</span></label>
+        <label class="check"><input id="cOlhos" type="checkbox"><span>Registrar os programas e arquivos que eu uso</span></label>
+        <label class="check"><input id="cIni" type="checkbox"><span>Abrir junto com o Windows</span></label>
+        <label class="campo"><span>Atalho para falar</span><input id="cAtalho" type="text" placeholder="ctrl+space"></label>
+        <div class="campo"><span>Cor</span><div id="cTemas" class="temas"></div></div>
+        <label class="campo"><span>Nunca registrar janelas com estas palavras (uma por linha)</span><textarea id="cIgn" rows="5"></textarea></label>
+        <div class="linha"><button type="button" class="btn btnA" id="cSalvar">SALVAR</button><button type="button" class="btn" id="cDados">ABRIR PASTA DE DADOS</button><span id="cOk" class="mono mu"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+<script src="comum.js"></script>
+<script src="principal.js"></script>
+</body>
+</html>

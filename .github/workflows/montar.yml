@@ -1,0 +1,110 @@
+name: Montar Mantiqueira
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+    inputs:
+      sem_turbo:
+        description: "Pular o modo Turbo (download menor)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: montar
+  cancel-in-progress: true
+
+jobs:
+  montar:
+    runs-on: windows-latest
+    timeout-minutes: 300
+    env:
+      DIST: C:\m\Mantiqueira
+      OUT: C:\m\saida
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONUTF8: "1"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SEM_TURBO: ${{ inputs.sem_turbo && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Espaço em disco
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='Livre(GB)';e={[int]($_.Free/1GB)}}
+
+      - name: Python portátil
+        shell: pwsh
+        run: |
+          $py = Split-Path (Get-Command python).Source
+          New-Item -ItemType Directory -Force $env:DIST | Out-Null
+          Copy-Item $py "$env:DIST\python" -Recurse
+          & "$env:DIST\python\python.exe" --version
+
+      - name: Bibliotecas
+        shell: pwsh
+        run: |
+          & "$env:DIST\python\python.exe" -m pip install --no-cache-dir --no-warn-script-location -r build\requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Remove-Item "$env:DIST\python\Lib\site-packages\torch\lib\*.lib" -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:DIST\python" -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+
+      - name: Programa
+        shell: pwsh
+        run: |
+          Copy-Item app "$env:DIST\app" -Recurse
+          Copy-Item LEIA-ME.txt "$env:DIST\LEIA-ME.txt"
+
+      - name: Modelos (IA, voz e ouvido)
+        shell: pwsh
+        run: |
+          python build\baixar.py $env:DIST
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Ícone, Mantiqueira.exe e instalador
+        shell: pwsh
+        run: |
+          python -m pip install --no-cache-dir Pillow pyinstaller
+          python build\icone.py build\mantiqueira.ico
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:winexe /win32icon:build\mantiqueira.ico /r:System.Windows.Forms.dll /out:"$env:DIST\Mantiqueira.exe" build\Iniciar.cs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python -m PyInstaller --noconfirm --onefile --windowed --name Instalar-Mantiqueira --icon build\mantiqueira.ico --distpath C:\m\inst build\instalar.py
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Teste de funcionamento
+        shell: pwsh
+        run: |
+          & "$env:DIST\python\python.exe" build\teste_fumaca.py $env:DIST
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Remove-Item "$env:DIST\dados" -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:DIST\app" -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+
+      - name: Tamanho
+        shell: pwsh
+        run: |
+          Get-ChildItem $env:DIST -Directory | ForEach-Object { "{0,-12} {1,8:N2} GB" -f $_.Name, ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1GB) }
+
+      - name: Empacotar em partes
+        shell: pwsh
+        run: |
+          python build\empacotar.py $env:DIST $env:OUT
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Copy-Item C:\m\inst\Instalar-Mantiqueira.exe $env:OUT
+          Copy-Item LEIA-ME.txt $env:OUT
+          Get-ChildItem $env:OUT | Format-Table Name, @{n='MB';e={[int]($_.Length/1MB)}}
+
+      - name: Publicar na aba Releases
+        shell: pwsh
+        run: |
+          $tag = "v1.0.${{ github.run_number }}"
+          $notas = "Baixe TODOS os arquivos abaixo para a mesma pasta e rode Instalar-Mantiqueira.exe. Os arquivos Mantiqueira-Turbo.zip.* sao opcionais (modo Turbo). Veja LEIA-ME.txt."
+          gh release create $tag --title "Mantiqueira $tag" --notes $notas (Get-ChildItem $env:OUT).FullName
+          if ($LASTEXITCODE -ne 0) { exit 1 }
