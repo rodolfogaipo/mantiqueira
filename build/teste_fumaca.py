@@ -234,7 +234,7 @@ def _():
     n.indice.varrer(str(pasta), "pc")
     it = Intencoes(n)
     relato = []
-    for frase in ("procura no computador a mesa luna oval", "procura a mesa lunna ovl", "onde está o orçamento do silva",
+    for frase in ("procura a mesa luna oval", "procura a mesa lunna ovl", "onde está o orçamento do silva",
                   "me conta uma curiosidade sobre madeira", "preciso de uma frase motivacional"):
         r = it.tratar(frase, [])
         relato.append(f"{frase} → {r}")
@@ -248,6 +248,56 @@ def _():
     relato += [f"memória → {r}", f"esquecer → {r2}"]
     print("\n".join(relato), flush=True)
     print("::notice title=Busca e memória::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
+
+
+@etapa("abrir só o que foi pedido, parar e procurar por lugar")
+def _():
+    import shutil
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.indice import Indice, NOMES
+    from mantiqueira.memoria import Memoria
+    from mantiqueira.frases import Frases
+    from mantiqueira.intencoes import Intencoes
+    import mantiqueira.intencoes as I
+    abertos = []
+    I.os.startfile = lambda c: abertos.append(c)
+    class F: pass
+    n = F(); n.cfg = Config(); n.db = Banco(paths.DADOS / "t141.db"); n.olhos = None; n.sistemas = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.parar_fala = lambda: abertos.append("PAROU"); n.cerebro = None
+    n.indice = Indice(n); n.memoria = Memoria(n); n.frases = Frases(n.db)
+    base = paths.DADOS / "t141"; shutil.rmtree(base, ignore_errors=True)
+    arqs = {"C": ["Mesa Luna Oval.SLDASM", "Mesa Luna Oval.pdf", "Orcamento Silva.xlsx"],
+            "Y": ["Mesa Luna Oval.pdf", "Banqueta Miches.SLDPRT"],
+            "Z": ["Mesa Luna Oval.SLDASM", "Poltrona Brisa.pdf"]}
+    for d, lst in arqs.items():
+        (base / d / "Projetos").mkdir(parents=True)
+        for a in lst: (base / d / "Projetos" / a).write_bytes(b"x")
+        n.indice.varrer(str(base / d), "x")
+        origem = "pc" if d == "C" else "rede"
+        n.indice.con.execute("UPDATE arq SET raiz=?, origem=? WHERE raiz=?", (d + ":\\", origem, str(base / d))); n.indice.con.commit()
+    NOMES.update({"Y:\\": "File_Aluminas", "Z:\\": "File-Projetos"})
+    n.indice.locais = lambda: [("C:\\", "pc", ""), ("Y:\\", "rede", "File_Aluminas"), ("Z:\\", "rede", "File-Projetos")]
+    it = Intencoes(n)
+    relato = []
+    def t(fr):
+        abertos.clear(); r = it.tratar(fr, [])
+        relato.append(f"{fr} → {r} {[os.path.basename(a) for a in abertos]}")
+        return r
+    assert "Qual deles" in t("abre o pdf da mesa luna oval") and not abertos
+    t("o primeiro"); assert abertos and abertos[0].endswith(".pdf")
+    t("abre o pdf da mesa luna oval no computador"); assert len(abertos) == 1 and abertos[0].endswith(".pdf")
+    t("abre a montagem da mesa luna no file projetos"); assert abertos and "Z" in abertos[0] and abertos[0].endswith(".SLDASM")
+    assert "Aluminas" in t("procura no aluminas a banqueta miches")
+    assert "Não encontrei" in t("procura no file projetos a banqueta miches")
+    assert "Não encontrei" in t("procura no computador banqueta miches")
+    for fr in ("não", "para", "cancela", "não quero"):
+        assert t(fr).startswith("Ok") and abertos == ["PAROU"], fr
+    assert t("tudo bem com você?") is None
+    print("\n".join(relato), flush=True)
+    print("::notice title=Abrir, parar e lugares::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
+
 
 
 @etapa("conversas de teste (secretário)")

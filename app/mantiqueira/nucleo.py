@@ -203,6 +203,8 @@ class Nucleo:
         threading.Thread(target=self._processar, args=(texto, origem), daemon=True).start()
 
     def _processar(self, texto, origem):
+        if self.voz and getattr(self.voz, "falando", False):
+            self.voz.parar()                 # pedido novo: cala a resposta anterior na hora
         self.estado = "pensando"
         self.ultima = {"usuario": texto, "assistente": "", "detalhe": ""}
         self.detalhe_texto = ""

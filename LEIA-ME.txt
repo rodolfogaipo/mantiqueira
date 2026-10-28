@@ -44,7 +44,12 @@ BUSCA DE ARQUIVOS
 - Ele faz um mapa do computador inteiro (C:, Área de Trabalho, Downloads,
   Documentos, OneDrive...), do pendrive e das pastas de rede Y: e Z:.
   O primeiro mapa leva alguns minutos; depois se atualiza sozinho.
-- "procura no computador ...", "procura na rede ...", "procura no pendrive ...".
+- "procura no computador ..." (só o C:), "procura no File Projetos ..." (só o Z:),
+  "procura no File Aluminas ..." (só o Y:), "procura no pendrive ...",
+  "procura na rede ..." (Y: e Z:). Sem dizer onde, procura em tudo.
+- "abre o PDF da mesa luna": ele só abre PDF. Se houver mais de um, ele
+  pergunta qual. Ele nunca abre nada sem o senhor pedir com "abre".
+- "não", "para", "cancela": ele cala na hora e não faz mais nada.
   Se o nome estiver errado ele sugere os parecidos. Depois diga "abre",
   "abre o segundo" ou "abre a pasta". Os caminhos aparecem na tela.
 - CONHECIMENTO mostra o estado do mapa e o botão ATUALIZAR AGORA.
@@ -57,7 +62,7 @@ PROGRAMAS ABERTOS
 
 SISTEMAS DA EMPRESA (CNPs)
 - CONFIGURAÇÕES > SISTEMAS DA EMPRESA > ENTRAR: faça o login uma vez na
-  janela que abre e feche. Ele guarda a sessão e consulta sozinho, só
+  janela que abre, espere a lista aparecer e feche. Ele guarda a sessão e consulta sozinho, só
   lendo (nunca cria, altera ou apaga nada). "abre o sistema de CNPs"
   abre no navegador.
 

@@ -27,6 +27,22 @@ IGNORAR_CAMINHOS = (r"\appdata\local\microsoft", r"\appdata\local\temp", r"\appd
                     r"\appdata\local\microsoft\edge", r"\appdata\roaming\microsoft\windows\recent",
                     r"\programdata\microsoft", r"\programdata\package cache")
 ORIGEM_NOME = {"pc": "no computador", "pendrive": "no pendrive", "rede": "na rede"}
+NOMES = {}                 # 'Z:\\' → 'File-Projetos' (nome curto da pasta de rede / rótulo do disco)
+
+
+def apelido(raiz):
+    """Nome curto da unidade para falar e para reconhecer ('File-Projetos', 'File_Aluminas')."""
+    if raiz in NOMES:
+        return NOMES[raiz]
+    bruto = nome_unidade(raiz)
+    nome = ""
+    m = re.search(r"\\\\[^\\]+\\(.+)$", bruto.strip())          # \\servidor\pasta → pasta
+    if m:
+        nome = m.group(1)
+    elif bruto.strip():
+        nome = bruto.split()[0]
+    NOMES[raiz] = nome
+    return nome
 INTERVALO_PC = 6 * 3600
 INTERVALO_REDE = 12 * 3600
 
@@ -35,6 +51,26 @@ def norm(t):
     t = textutil.sem_acento((t or "").lower())
     t = re.sub(r"[_\-\.\(\)\[\]]+", " ", t)
     return re.sub(r"\s+", " ", t).strip()
+
+
+def nome_unidade(raiz):
+    """Nome que o Windows mostra para a unidade: rótulo do disco e, na rede, o nome da pasta compartilhada
+    (ex.: Z:\\ → 'File-Projetos \\\\192.168.1.6\\File-Projetos')."""
+    partes = []
+    try:
+        buf = ctypes.create_unicode_buffer(261)
+        if ctypes.windll.kernel32.GetVolumeInformationW(raiz, buf, 261, None, None, None, None, 0):
+            partes.append(buf.value)
+    except Exception:
+        pass
+    try:
+        buf = ctypes.create_unicode_buffer(1024)
+        tam = ctypes.c_ulong(1024)
+        if ctypes.windll.mpr.WNetGetConnectionW(raiz[:2], buf, ctypes.byref(tam)) == 0:
+            partes.append(buf.value)
+    except Exception:
+        pass
+    return " ".join(partes)
 
 
 def unidades():
@@ -88,6 +124,16 @@ class Indice:
     # ------------------------------------------------------------------ varredura
     def iniciar(self):
         threading.Thread(target=self._loop, daemon=True, name="indice").start()
+
+    def locais(self):
+        """[(raiz, origem, apelido)] das unidades conectadas agora."""
+        out = []
+        for raiz, _, origem in unidades():
+            try:
+                out.append((raiz, origem, apelido(raiz)))
+            except Exception:
+                out.append((raiz, origem, ""))
+        return out
 
     def atualizar_agora(self):
         """Pedido da tela: refaz o mapa de tudo no próximo ciclo (sem esperar as 6/12 horas)."""
@@ -200,16 +246,23 @@ class Indice:
         return linhas
 
     # ------------------------------------------------------------------ busca
-    def buscar(self, consulta, onde="tudo", limite=8):
-        """Devolve (exatos, parecidos): listas de dicts com nome, caminho, pasta, origem, eh_pasta, mod."""
+    def buscar(self, consulta, onde="tudo", limite=8, exts=None):
+        """Devolve (exatos, parecidos): listas de dicts com nome, caminho, pasta, origem, eh_pasta, mod.
+        onde: 'tudo' | 'pc' (só C:) | 'rede' | 'pendrive' | uma unidade como 'Z:\\'. exts: só essas extensões."""
         cn = norm(consulta)
         termos = [t for t in cn.split() if len(t) >= 2]
         if not termos:
             return [], []
         filtro, args_f = "", []
-        if onde in ("pc", "rede", "pendrive"):
-            filtro = " AND a.origem IN (?, ?)" if onde == "pc" else " AND a.origem=?"
-            args_f = ["pc", "pendrive"] if onde == "pc" else [onde]
+        if onde == "pc":
+            filtro, args_f = " AND a.raiz=?", ["C:\\"]
+        elif onde in ("rede", "pendrive"):
+            filtro, args_f = " AND a.origem=?", [onde]
+        elif re.fullmatch(r"[A-Za-z]:\\", onde or ""):
+            filtro, args_f = " AND a.raiz=?", [onde.upper()]
+        if exts:
+            filtro += " AND a.ext IN (" + ",".join("?" for _ in exts) + ")"
+            args_f += list(exts)
         # 1) todos os termos aparecem no nome
         where = " AND ".join("a.nn LIKE ?" for _ in termos)
         exatos = self.q(f"SELECT a.* FROM arq a WHERE {where}{filtro} LIMIT 400",
@@ -271,8 +324,9 @@ class Indice:
             self.con.commit()
 
     def achar(self, nome):
-        """Melhor caminho para um nome de arquivo (usado para abrir arquivos citados)."""
-        ex, par = self.buscar(os.path.splitext(nome)[0], limite=1)
+        """Melhor caminho para um nome de arquivo (usado para abrir arquivos citados). Respeita a extensão."""
+        base, ext = os.path.splitext(nome)
+        ex, par = self.buscar(base, limite=1, exts=[ext.lower()] if ext else None)
         r = (ex or par or [None])[0]
         return r["caminho"] if r else None
 
@@ -282,4 +336,7 @@ def descrever(r):
     pasta = r["pasta"]
     partes = [p for p in re.split(r"[\\/]", pasta) if p]
     curta = "\\".join(partes[-2:]) if len(partes) > 2 else pasta
-    return f"{r['nome']}, na pasta {curta} {ORIGEM_NOME.get(r['origem'], '')}".strip()
+    onde = ORIGEM_NOME.get(r["origem"], "")
+    if r["origem"] == "rede" and NOMES.get(r.get("raiz") or ""):
+        onde = f"na rede, no {NOMES[r['raiz']].replace('_', ' ').replace('-', ' ')}"
+    return f"{r['nome']}, na pasta {curta} {onde}".strip()

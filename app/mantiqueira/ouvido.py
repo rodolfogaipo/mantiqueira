@@ -125,8 +125,9 @@ class Ouvido:
                     self._abrir()
                 except Exception as e:
                     self.ok = False
+                    if self.erro != "Microfone não encontrado":
+                        log.warning("sem microfone: %s (tento de novo a cada 8 s, sem repetir este aviso)", e)
                     self.erro = "Microfone não encontrado"
-                    log.warning("sem microfone: %s", e)
                     time.sleep(8)
                     continue
             try:

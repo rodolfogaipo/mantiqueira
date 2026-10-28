@@ -13,11 +13,10 @@ ESQUEMA = {
     "type": "object",
     "properties": {
         "resposta": {"type": "string"},
-        "acao": {"type": "string", "enum": ["nenhuma", "criar_lembrete", "abrir_arquivo", "salvar_nota",
+        "acao": {"type": "string", "enum": ["nenhuma", "criar_lembrete", "salvar_nota",
                                              "ler_tela", "concluir_lembrete", "mudar_tratamento", "mudar_nome"]},
         "quando": {"type": "string"},
         "texto": {"type": "string"},
-        "arquivo": {"type": "string"},
     },
     "required": ["resposta", "acao"],
 }
@@ -125,14 +124,6 @@ class Cerebro:
             partes += leitor.contexto(pergunta)
         except Exception:
             log.exception("leitor")
-        sw = getattr(n, "sistemas", None)
-        if sw:
-            try:
-                _, txt = sw.contexto(pergunta)
-                if txt:
-                    partes.append(txt)
-            except Exception:
-                log.exception("sistemas web")
         extra = getattr(n, "contexto_extra", "")
         if extra:
             partes.append(extra)
@@ -148,6 +139,10 @@ Você roda 100% offline no computador dele. Fale em português do Brasil, com ed
 Chame o usuário de "{t}". O seu nome é Mantiqueira; o usuário NÃO se chama Mantiqueira.
 Suas respostas serão FALADAS, então escreva como se fala: sem listas, sem markdown, sem emojis, sem símbolos.
 O TAMANHO da resposta acompanha a pergunta: pergunta simples ou conversa = 1 a 2 frases. Quando ele pedir explicação, "como faço", "me explica", "detalha" ou "explica melhor" = explique de verdade, passo a passo, em frases completas ("Primeiro…", "Depois…", "Por último…"), com o que clicar, o que conferir e um cuidado comum; até umas 12 frases. Se ele disser "resume", seja breve. Sempre de forma fácil de entender.
+OBEDIÊNCIA: faça SOMENTE o que ele pediu, nada além. Nunca tome iniciativa de abrir, exportar, apagar ou mudar nada. Se ele disser "não", "para" ou "cancela", apenas concorde.
+Você NÃO consegue fazer nada depois de responder: nunca diga "vou verificar", "vou procurar", "vou abrir" ou "um momento". Ou responda com os dados que estão abaixo, ou diga claramente que não tem essa informação.
+Você não abre arquivos nem procura arquivos: quem faz isso é o próprio programa quando ele diz "abre ..." ou "procura ...". Se ele quiser um arquivo, diga para ele pedir assim: "abre o PDF da mesa luna" ou "procura no computador ...".
+Sobre o sistema da empresa (CNPs, Órigus): use SOMENTE os DADOS DO SISTEMA DA EMPRESA abaixo. Se não houver esses dados abaixo, diga que não conseguiu ler o sistema. Nunca invente CNP, produto, pedido ou data.
 Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
 Sobre o que ele fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
 NUNCA diga onde um arquivo está guardado se isso não estiver nos dados abaixo: diga que pode procurar ("quer que eu procure no computador ou na rede?").
@@ -156,17 +151,15 @@ Para dúvidas sobre programas (SolidWorks, AutoCAD, SketchUp, 3ds Max, Aspire, C
 
 Responda SEMPRE em JSON com os campos:
 - resposta: o que você vai falar.
-- acao: nenhuma | criar_lembrete | abrir_arquivo | salvar_nota | ler_tela | concluir_lembrete | mudar_tratamento | mudar_nome
+- acao: nenhuma | criar_lembrete | salvar_nota | ler_tela | concluir_lembrete | mudar_tratamento | mudar_nome
 - quando: só para criar_lembrete, no formato AAAA-MM-DD HH:MM, calculado a partir de AGORA, e SÓ se ele disse a hora ou o dia.
 - texto: o texto do lembrete (curto, no infinitivo: "Ligar para o fornecedor"), da nota, do lembrete a concluir, ou o novo tratamento/nome.
-- arquivo: o nome do arquivo a abrir (exatamente como aparece no registro).
 
 Regras:
 - criar_lembrete SOMENTE quando ele pedir para lembrar/avisar/agendar algo. Se ele não disse quando, use acao nenhuma e pergunte "Para quando, {t}?".
 - "fale X", "diga X", "repete X" → apenas fale X na resposta (acao nenhuma). Não é lembrete.
 - "me chame de X", "pode me chamar de X", "quero que me chame de X" → mudar_tratamento com texto X.
 - "meu nome é X" → mudar_nome com texto X.
-- "abre", "abrir", "pode abrir" (inclusive "sim" logo depois de você oferecer abrir algo) → abrir_arquivo.
 - "anota que", "guarda que", "lembre-se que (uma informação, sem horário)" → salvar_nota.
 - "o que tem na minha tela", "lê a tela" → ler_tela.
 - "já fiz", "pode tirar o lembrete", "apaga o lembrete" → concluir_lembrete.
@@ -217,7 +210,24 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
         acao = (r.get("acao") or "nenhuma").strip()
         log.info("IA: acao=%s r=%r", acao, r)
 
-        # proteções contra a IA se confundir
+        # proteções: a IA só executa uma ação quando a frase dele pede aquilo
+        p_sa = textutil.sem_acento(pergunta.lower())
+        permitido = {
+            "salvar_nota": r"\b(anota|anote|anotar|guarda|guarde|salva|salve|lembre-se|lembra que|registra)\b",
+            "ler_tela": r"\btela\b",
+            "concluir_lembrete": r"\b(lembrete|ja fiz|ja liguei|ja mandei|ja enviei|conclui|pode tirar|tira o|apaga o)\b",
+            "mudar_tratamento": r"\bcham(e|a|ar)\b",
+            "mudar_nome": r"\bmeu nome\b",
+        }
+        if acao in permitido and not re.search(permitido[acao], p_sa):
+            log.info("ação %s bloqueada (não foi pedida)", acao)
+            acao = "nenhuma"
+        if acao not in ("nenhuma", "criar_lembrete") and acao not in permitido:
+            acao = "nenhuma"
+        if acao == "nenhuma" and re.search(r"\b(vou (verificar|procurar|abrir|checar|olhar|buscar)|um momento|aguarde)\b",
+                                            textutil.sem_acento(resposta.lower())):
+            resposta = f"Não tenho essa informação aqui, {trat}."
+
         if acao == "criar_lembrete" and not textutil.pede_lembrete(pergunta) and not self._ultimo_perguntou_quando():
             acao = "nenhuma"
             resposta = self._conversa_simples(pergunta) or resposta

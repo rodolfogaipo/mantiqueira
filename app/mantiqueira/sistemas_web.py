@@ -91,36 +91,72 @@ class SistemasWeb:
         p = textutil.sem_acento(pergunta.lower())
         for s in self.lista():
             chaves = [s["nome"]] + (s.get("palavras") or "").split()
+            if "cnp" in s["url"].lower():
+                chaves += ["cnp", "cnps", "origus", "syntex"]
             if any(re.search(r"\b" + re.escape(textutil.sem_acento(c.lower())) + r"\b", p) for c in chaves if len(c) >= 3):
                 return s
         return None
 
     # ------------------------------------------------------------------ janela
+    def _viva(self):
+        if self.janela is None:
+            return False
+        try:
+            self.janela.get_current_url()
+            return True
+        except Exception:
+            self.janela = None
+            return False
+
     def _janela(self, url, visivel):
         import webview
-        if self.janela is None:
-            self.janela = webview.create_window("Mantiqueira — sistema da empresa", url=url, width=1200, height=800,
-                                                hidden=not visivel)
-            fim = time.time() + 20
+        if not self._viva():
+            # nasce visível (minimizada quando é só para ler): janela criada escondida às vezes nem carrega a página
+            w = webview.create_window("Mantiqueira — sistema da empresa", url=url, width=1200, height=800,
+                                      minimized=not visivel)
+            self.janela = w
+
+            def ao_pedir_fechar():
+                if getattr(self.n, "saindo", False):
+                    return True
+                threading.Thread(target=self.esconder, daemon=True).start()   # o X só esconde: o login continua valendo
+                return False
+
+            def ao_fechar():
+                if self.janela is w:
+                    self.janela = None
+            w.events.closing += ao_pedir_fechar
+            w.events.closed += ao_fechar
+            fim = time.time() + 25
             while time.time() < fim:
                 try:
-                    if self.janela.get_current_url():
+                    if w.get_current_url():
                         break
                 except Exception:
                     pass
                 time.sleep(0.5)
+            if not visivel:
+                time.sleep(2)
+                self.esconder()
         else:
-            self.janela.load_url(url)
+            try:
+                if (self.janela.get_current_url() or "").split("#")[0] != url:
+                    self.janela.load_url(url)
+            except Exception:
+                self.janela.load_url(url)
             if visivel:
                 self.janela.show()
         return self.janela
 
     def abrir_para_login(self, sistema):
-        w = self._janela(sistema["url"], True)
+        with self.lock:
+            w = self._janela(sistema["url"], True)
         try:
             w.restore()
+            w.show()
         except Exception:
             pass
+        self.cache.pop(sistema["nome"], None)
         return True
 
     def esconder(self):
@@ -146,6 +182,11 @@ class SistemasWeb:
                 time.sleep(1)
                 dados = self._eval(w, JS_LER)
             if not dados:
+                try:
+                    url_atual = w.get_current_url()
+                except Exception:
+                    url_atual = None
+                log.info("sistema %s sem resposta; endereço atual: %s", nome, url_atual)
                 raise RuntimeError("a página não respondeu")
             if dados["login"]:
                 self.precisa_login.add(nome)
@@ -189,6 +230,7 @@ class SistemasWeb:
             return None
 
     def contexto(self, pergunta):
+        """(sistema, texto) para a IA. Em caso de erro/login, o texto explica o problema."""
         s = self.qual(pergunta)
         if not s:
             return None, ""
@@ -198,11 +240,17 @@ class SistemasWeb:
             log.exception("sistema web")
             return s, f"[Sistema {s['nome']}: não consegui acessar agora ({e}).]"
         if d.get("login"):
-            return s, f"[Sistema {s['nome']}: precisa fazer login. Diga ao usuário para abrir CONFIGURAÇÕES > SISTEMAS DA EMPRESA > ENTRAR e fazer o login uma vez.]"
+            return s, f"[Sistema {s['nome']}: precisa fazer login.]"
+        return s, self.formatar(s, d, pergunta)
+
+    def formatar(self, s, d, pergunta):
         cab, linhas = d["cab"], d["linhas"]
         termos = [t for t in re.findall(r"[0-9a-z]{2,}", textutil.sem_acento(pergunta.lower()))
                   if t not in {"quais", "qual", "tem", "do", "da", "de", "no", "na", "os", "as", "cnp", "cnps", "me", "fala",
-                               "quantos", "quantas", "sistema", "lista", "estao", "esta", "que", "um", "uma", "com"}]
+                               "quantos", "quantas", "sistema", "lista", "estao", "esta", "que", "um", "uma", "com", "origus",
+                               "programa", "olha", "ve", "veja", "consulta", "mantiqueira", "dia", "data", "previsto",
+                               "prevista", "quando", "para", "pra", "ela", "ele", "isso", "em", "e", "o", "a"}]
+
         def fmt(l):
             return " | ".join(f"{cab[i] if i < len(cab) and cab[i] else 'col' + str(i + 1)}={v}" for i, v in enumerate(l) if v)
         escolhidas = linhas
@@ -211,10 +259,10 @@ class SistemasWeb:
             boas = [x for x in pont if x[0] > 0]
             if boas:
                 escolhidas = [l for _, _, l in sorted(boas, key=lambda x: (-x[0], x[1]))]
-        texto = [f"[Sistema da empresa: {s['nome']} — {len(linhas)} registros lidos às {d['hora']}]",
+        texto = [f"[DADOS DO SISTEMA DA EMPRESA: {s['nome']} — {len(linhas)} registros lidos às {d['hora']}]",
                  "Colunas: " + " | ".join(c for c in cab if c)]
         for l in escolhidas[:40]:
             texto.append(fmt(l))
         if len(escolhidas) > 40:
             texto.append(f"... e mais {len(escolhidas) - 40} registros.")
-        return s, "\n".join(texto)
+        return "\n".join(texto)
