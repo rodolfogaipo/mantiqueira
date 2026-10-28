@@ -1,5 +1,6 @@
 """Voz: neural natural (XTTS v2, na placa de vídeo) com reserva rápida (Piper, no processador)."""
 import json
+import re
 import queue
 import subprocess
 import threading
@@ -20,7 +21,6 @@ VOZ_PERSONALIZADA_PT = paths.DADOS / "voz_personalizada.pt"
 
 def dividir_frases(texto, limite=190):
     """Divide em frases curtas (o XTTS fica instável com trechos longos)."""
-    import re
     partes = [p.strip() for p in re.split(r"(?<=[.!?…;:])\s+", texto) if p.strip()]
     out = []
     for p in partes:
@@ -32,7 +32,13 @@ def dividir_frases(texto, limite=190):
             p = p[corte + 1:].strip()
         if p:
             out.append(p)
-    return out or [texto]
+    # a voz natural às vezes LÊ o ponto final ("ponto"); tirar a pontuação do fim (menos ? e !)
+    limpo = []
+    for f in out:
+        f = re.sub(r"[.;:…,]+$", "", f.strip()).strip()
+        if f:
+            limpo.append(f)
+    return limpo or [texto.strip(" .")]
 
 
 def suavizar(wav, sr=24000):
