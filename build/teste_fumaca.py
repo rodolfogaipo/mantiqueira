@@ -22,10 +22,14 @@ def etapa(nome):
         try:
             fn()
             print(f"[OK]   {nome} ({time.time() - t:.0f}s)", flush=True)
-        except Exception as e:
+            print(f"::notice title=Teste OK::{nome} ({time.time() - t:.0f}s)", flush=True)
+        except BaseException as e:
             import traceback
-            traceback.print_exc()
+            tb = traceback.format_exc()
+            print(tb, flush=True)
             print(f"[ERRO] {nome}: {e}", flush=True)
+            msg = (tb[-3000:]).replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+            print(f"::error title=Teste {nome}::{msg}", flush=True)
             falhas.append(nome)
         return fn
     return dec
@@ -69,6 +73,7 @@ def _():
         with urllib.request.urlopen(req, timeout=300) as r:
             txt = json.loads(r.read())["choices"][0]["message"]["content"]
         print("   resposta:", txt)
+        print("::notice title=Resposta da IA::" + txt.replace("\n", " ")[:900], flush=True)
         dados = extrair_json(txt)
         assert dados.get("acao") == "criar_lembrete", dados
     finally:
@@ -96,6 +101,7 @@ def _():
     m.load_checkpoint(cfg, checkpoint_dir=str(paths.XTTS), use_deepspeed=False, eval=True)
     nomes = list(m.speaker_manager.speakers.keys())
     print("   vozes:", len(nomes), nomes[:6])
+    print("::notice title=Vozes XTTS::" + ", ".join(nomes)[:900], flush=True)
     sp = m.speaker_manager.speakers["Damien Black" if "Damien Black" in nomes else nomes[0]]
     with torch.inference_mode():
         out = m.inference("Olá, senhor.", "pt", sp["gpt_cond_latent"], sp["speaker_embedding"])

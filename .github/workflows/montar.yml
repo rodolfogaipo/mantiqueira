@@ -62,11 +62,29 @@ jobs:
           Copy-Item app "$env:DIST\app" -Recurse
           Copy-Item LEIA-ME.txt "$env:DIST\LEIA-ME.txt"
 
+      - name: Recuperar modelos já baixados
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            C:\m\Mantiqueira\modelos
+            C:\m\Mantiqueira\bin
+          key: modelos-v1-${{ hashFiles('build/baixar.py') }}
+
       - name: Modelos (IA, voz e ouvido)
         shell: pwsh
         run: |
           python build\baixar.py $env:DIST
           if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Guardar modelos para a próxima montagem
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            C:\m\Mantiqueira\modelos
+            C:\m\Mantiqueira\bin
+          key: modelos-v1-${{ hashFiles('build/baixar.py') }}
 
       - name: Ícone, Mantiqueira.exe e instalador
         shell: pwsh
