@@ -20,8 +20,12 @@ assinado digitalmente, por isso o aviso).
 
 COMO USAR
 - Diga "Mantiqueira" e, depois do bipe, fale o que quer.
-- Ou aperte Ctrl + Espaço (em qualquer programa) e fale.
+- Ou aperte Ctrl + Shift + Espaço (em qualquer programa) e fale.
+- Ou aperte Ctrl + Espaço (ou clique no ícone azul ao lado do relógio):
+  abre a BARRA RÁPIDA acima da barra de tarefas. Digite e dê Enter;
+  ele responde só falando. Esc fecha a barra.
 - Ou digite na caixa embaixo da tela.
+- Para ele PARAR DE FALAR: Esc na tela principal ou clique no núcleo.
 - Exemplos:
     "Mantiqueira, me lembra às 11 de enviar o DXF pro corte"
     "me lembra toda quarta às 14 da reunião da equipe"
@@ -30,6 +34,37 @@ COMO USAR
     "anota que a medida da viga é 3200"
     "o que está escrito na minha tela?"
     "o que eu tenho pra hoje?"
+    "procura no computador a mesa luna oval"   (ou "procura na rede ...")
+    "qual o total da coluna valor na planilha aberta?"
+    "quais CNPs tem no programa?"
+    "me conta uma curiosidade" / "preciso de uma frase motivacional"
+    "o que você sabe sobre mim?" / "esquece que ..."
+
+BUSCA DE ARQUIVOS
+- Ele faz um mapa do computador inteiro (C:, Área de Trabalho, Downloads,
+  Documentos, OneDrive...), do pendrive e das pastas de rede Y: e Z:.
+  O primeiro mapa leva alguns minutos; depois se atualiza sozinho.
+- "procura no computador ...", "procura na rede ...", "procura no pendrive ...".
+  Se o nome estiver errado ele sugere os parecidos. Depois diga "abre",
+  "abre o segundo" ou "abre a pasta". Os caminhos aparecem na tela.
+- CONHECIMENTO mostra o estado do mapa e o botão ATUALIZAR AGORA.
+
+PROGRAMAS ABERTOS
+- Ele lê as planilhas abertas no Excel (linhas, somas, médias), os
+  documentos abertos no Word, as informações da peça no SolidWorks
+  (propriedades, massa, configuração) e, de outros programas, o texto
+  da janela ("o que tem no CypCut?").
+
+SISTEMAS DA EMPRESA (CNPs)
+- CONFIGURAÇÕES > SISTEMAS DA EMPRESA > ENTRAR: faça o login uma vez na
+  janela que abre e feche. Ele guarda a sessão e consulta sozinho, só
+  lendo (nunca cria, altera ou apaga nada). "abre o sistema de CNPs"
+  abre no navegador.
+
+MEMÓRIA
+- Ele vai aprendendo com as conversas (fatos que o senhor conta, onde
+  ficam os arquivos que pede, horários e programas de costume).
+  "o que você sabe sobre mim?" mostra tudo; "esquece ..." apaga.
 
 COMO ATUALIZAR (quando já está instalado)
 - Baixe só Instalar-Mantiqueira.exe e Mantiqueira-Atualizacao.zip da versão
@@ -49,11 +84,13 @@ VOZ MAIS HUMANA
 HOLOGRAMA
 - No SolidWorks ele mostra a SUA peça/montagem girando em 3D (atualiza ao
   abrir e ao salvar). Peças muito pesadas, desenhos e outros programas
-  mostram uma ilustração. Parado, mostra pai e filho brincando.
+  mostram uma ilustração.
+- Parado, mostra a SUA FOTO como holograma: CONFIGURAÇÕES > ESCOLHER FOTO.
 - Dá para desligar o 3D da peça em CONFIGURAÇÕES.
 
 PRIMEIRA ABERTURA
 - Leva cerca de 1 minuto para carregar a IA e a voz.
+- Ao ligar junto com o Windows ele diz "Bem-vindo de volta, senhor".
 - Abra CONFIGURAÇÕES para escolher a voz (botão TESTAR), o microfone e a cor.
 - Para criar uma voz personalizada, use "GRAVAR 20 S" e leia qualquer texto
   em voz alta. Use apenas a voz de quem autorizar.

@@ -45,22 +45,22 @@ var EXEMPLO = {
     function em(min){ return new Date(agora.getTime() + min*60000).toISOString(); }
     return Promise.resolve({
       pronto:true, boot:'', estado:'ocioso', tema:'Azul', nome:'Rodolfo', cpu:23, ram:'9.1/16G', gpu:'4.2/6G',
-      modo_ia:'NORMAL', dispositivo:'GPU', latencia:1.1, ativacao:true, palavra:'MANTIQUEIRA', atalho:'CTRL+ESPAÇO',
+      modo_ia:'NORMAL', dispositivo:'GPU', latencia:1.1, ativacao:true, palavra:'MANTIQUEIRA', atalho:'CTRL+SHIFT+ESPAÇO',
       sub:[{nome:'OUVIDO',pct:1,val:'ATIVO'},{nome:'NÚCLEO IA',pct:1,val:'NORMAL'},{nome:'VOZ',pct:1,val:'NATURAL'},
            {nome:'VISÃO',pct:1,val:'REC',alerta:true},{nome:'RAM',pct:.57,val:'9.1G'},{nome:'VRAM',pct:.7,val:'4.2G'}],
       agenda:[{id:1,quando:em(31),hora:'09:30',dia:'HOJE',texto:'Ligar para o fornecedor de alumínio (exemplo)'},
               {id:2,quando:em(121),hora:'11:00',dia:'HOJE',texto:'Enviar DXF da pérgola (exemplo)'},
               {id:3,quando:em(301),hora:'14:00',dia:'HOJE',texto:'Reunião equipe P&D (exemplo)',repetir:'semanal'}],
       foco:{app:'SolidWorks',arquivo:'Pergola_Lamelas_v3.SLDASM',nao_salvo:true,tempo:'47 minutos',cad:true},
-      pendencias:[{id:1,texto:'Orcamento_Cliente.xlsx foi aberto 3 vezes desde ontem e continua sem salvar. (exemplo)',arquivo:'Orcamento_Cliente.xlsx'}],
+      pendencias:[{id:1,texto:'POLTRONA BALANÇO BRISA.sldasm ficou com alterações não salvas desde as 16:42. Arquivo com nome bem comprido para testar a quebra de linha da caixa (exemplo)',arquivo:'POLTRONA BALANÇO BRISA.sldasm'}],
       registro:[{hora:'08:12',app:'SolidWorks',nome:'Pergola_Lamelas_v3.SLDASM'},{hora:'07:58',app:'Excel',nome:'Orcamento_Cliente.xlsx'},{hora:'07:41',app:'Explorador',nome:'Projetos'}],
-      ultima:{usuario:'Em qual arquivo eu estava ontem no fim da tarde?',assistente:'Das 16 e 20 às 17 e 40, na montagem Pergola_Lamelas_v3. Deseja que eu a abra?'},
+      ultima:{usuario:'procura no computador mesa luna oval',assistente:'Achei: Mesa Luna Oval 2,80X1,20.SLDASM, na pasta Projetos do Z:. Quer que eu abra?',detalhe:'1. Z:\\Projetos\\Mesas\\Mesa Luna Oval 2,80X1,20.SLDASM\n2. C:\\Users\\Rodolfo\\Desktop\\Mesa Luna Oval.pdf'},
       alerta:null, aviso_gravacao:'', erros:[], holo:{tipo:'peca',chave:'peca'}
     });
   },
   enviar: function(){ return Promise.resolve(true); }, ouvir: function(){ return Promise.resolve(true); },
   historico: function(){ return Promise.resolve([{quando:'2026-10-28 08:58:00',papel:'usuario',texto:'Exemplo de pergunta'},{quando:'2026-10-28 08:58:02',papel:'assistente',texto:'Exemplo de resposta.'}]); },
-  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,holo_real:true,x_esconde:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+space',ignorar:['banco','senha']},vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
+  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,holo_real:true,x_esconde:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+shift+space',atalho_barra:'ctrl+space',sistemas_web:[{nome:'CNPs',url:'http://192.168.1.96:8080/cnp/cnps',palavras:'cnp cnps'}],ignorar:['banco','senha']},foto:false,vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
   salvar_config: function(){ return Promise.resolve(true); }, testar_voz: function(){ return Promise.resolve(true); },
   gravar_voz: function(){ return Promise.resolve(true); }, usar_arquivo_voz: function(){ return Promise.resolve(false); },
   lembrete: function(){ return Promise.resolve(true); }, pendencia: function(){ return Promise.resolve(true); },
@@ -73,7 +73,12 @@ var EXEMPLO = {
     {id:3,nome:'SketchUp 2023',origem:'guia',trechos:7},{id:4,nome:'3ds Max 2025',origem:'guia',trechos:7},
     {id:5,nome:'Aspire 12',origem:'guia',trechos:6},{id:6,nome:'CypCut laser',origem:'guia',trechos:5},
     {id:7,nome:'Office Excel Word PowerPoint',origem:'guia',trechos:6}]}); },
-  conhecimento_adicionar: function(){ return Promise.resolve(false); }, testar_aviso: function(){ return Promise.resolve(true); }, encerrar: function(){ return Promise.resolve(true); }, conhecimento_remover: function(){ return Promise.resolve(true); }
+  conhecimento_adicionar: function(){ return Promise.resolve(false); }, testar_aviso: function(){ return Promise.resolve(true); }, encerrar: function(){ return Promise.resolve(true); }, conhecimento_remover: function(){ return Promise.resolve(true); },
+  parar_fala: function(){ return Promise.resolve(true); }, esconder_barra: function(){ return Promise.resolve(true); },
+  escolher_foto: function(){ return Promise.resolve(false); }, sistemas_lista: function(){ return Promise.resolve([]); },
+  sistemas_salvar: function(){ return Promise.resolve(true); }, sistema_entrar: function(){ return Promise.resolve(true); },
+  indice_resumo: function(){ return Promise.resolve(['C:\\ 412.880 itens (atualizado 28/10 08:05) (exemplo)','Z:\\ 96.214 itens (atualizado 28/10 06:10) (exemplo)']); },
+  indice_atualizar: function(){ return Promise.resolve(true); }
 };
 
 var ROTULO_ESTADO = {carregando:'CARREGANDO', ocioso:'ESCUTANDO', gravando:'OUVINDO VOCÊ', transcrevendo:'ENTENDENDO',

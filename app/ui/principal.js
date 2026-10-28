@@ -52,7 +52,7 @@
   var NOME_HOLO = {real:'SUA PEÇA · 3D', peca:'PEÇA', chapa:'CHAPA METÁLICA', montagem:'MONTAGEM', desenho:'DESENHO 2D',
                    cad2d:'DESENHO CAD', movel:'MODELO 3D', cnc:'ROUTER CNC', laser:'CORTE A LASER', planilha:'PLANILHA',
                    documento:'DOCUMENTO', globo:'INTERNET', pasta:'ARQUIVOS', mensagem:'MENSAGENS', familia:'EM CASA',
-                   logo:'MANTIQUEIRA'};
+                   logo:'MANTIQUEIRA', foto:'EM CASA'};
   var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var estadoAtual = 'carregando', t0 = null, nivel = 0;
   function quadro(t){
@@ -163,6 +163,8 @@
     var u = e.ultima || {};
     $('uLine').textContent = u.usuario ? 'VOCÊ › ' + u.usuario : (e.pronto ? 'Diga "' + e.palavra + '" ou aperte ' + e.atalho + ' para falar.' : ' ');
     $('aLine').textContent = u.assistente ? '“' + u.assistente + '”' : (e.estado === 'pensando' ? '…' : ' ');
+    var det = u.detalhe || '';
+    if ($('dLine').getAttribute('data-v') !== det){ $('dLine').setAttribute('data-v', det); $('dLine').textContent = det; $('dLine').hidden = !det; }
     $('bMic').classList.toggle('ativo', e.estado === 'gravando');
 
     /* alerta */
@@ -192,6 +194,7 @@
     chamar('enviar', t);
   });
   $('bMic').addEventListener('click', function(){ chamar('ouvir'); });
+  document.querySelector('svg.hsvg').addEventListener('click', function(){ chamar('parar_fala'); });
   /* caixa de texto: clicar em qualquer parte dela foca; começar a digitar em qualquer lugar também */
   $('cmdf').addEventListener('mousedown', function(ev){
     if (!ev.target.closest('button') && ev.target !== $('cmd')){ ev.preventDefault(); $('cmd').focus(); }
@@ -213,7 +216,15 @@
   });
   $('alOk').addEventListener('click', function(){ if (ultimo && ultimo.alerta) chamar('lembrete', ultimo.alerta.id, 'concluir'); $('alerta').hidden = true; });
   $('alAdiar').addEventListener('click', function(){ if (ultimo && ultimo.alerta) chamar('lembrete', ultimo.alerta.id, 'adiar'); $('alerta').hidden = true; });
-  function pend(acao){ if (ultimo && ultimo.pendencias && ultimo.pendencias[0]) chamar('pendencia', ultimo.pendencias[0].id, acao); }
+  function pend(acao){
+    if (!(ultimo && ultimo.pendencias && ultimo.pendencias[0])) return;
+    $('pendMsg').textContent = acao === 'abrir' ? 'PROCURANDO A JANELA…' : '';
+    chamar('pendencia', ultimo.pendencias[0].id, acao).then(function(ok){
+      if (acao === 'abrir') $('pendMsg').textContent = ok ? 'PRONTO — JANELA NA FRENTE' : 'NÃO ACHEI ESSE ARQUIVO ABERTO NEM NO MAPA';
+      else { $('pendMsg').textContent = acao === 'adiar' ? 'TE LEMBRO DAQUI A 1 HORA' : 'MARCADA COMO RESOLVIDA'; }
+      setTimeout(function(){ $('pendMsg').textContent = ''; }, 4000);
+    });
+  }
   $('pAbrir').addEventListener('click', function(){ pend('abrir'); });
   $('pAdiar').addEventListener('click', function(){ pend('adiar'); });
   $('pOk').addEventListener('click', function(){ pend('resolver'); });
@@ -222,7 +233,10 @@
     b.addEventListener('click', function(){ $(b.getAttribute('data-fechar')).hidden = true; });
   });
   document.addEventListener('keydown', function(ev){
-    if (ev.key === 'Escape'){ $('ovHist').hidden = true; $('ovCfg').hidden = true; $('ovCon').hidden = true; }
+    if (ev.key === 'Escape'){
+      if (!algumPainelAberto()) { chamar('parar_fala'); return; }
+      $('ovHist').hidden = true; $('ovCfg').hidden = true; $('ovCon').hidden = true;
+    }
   });
 
   /* histórico */
@@ -245,6 +259,10 @@
       var docs = (c.docs || []), meus = docs.filter(function(d){ return d.origem === 'usuario'; }),
           guias = docs.filter(function(d){ return d.origem === 'guia'; });
       $('conStatus').textContent = c.status || '';
+      chamar('indice_resumo').then(function(l){
+        $('idxLista').innerHTML = (l && l.length) ? l.map(function(x){ return '<div>' + esc(x) + '</div>'; }).join('')
+          : '<div class="mu">O mapa começa a ser feito uns 40 segundos depois de abrir o Mantiqueira.</div>';
+      });
       $('conN').textContent = meus.length ? String(meus.length).padStart(2, '0') : '';
       $('conDocs').innerHTML = meus.length ? meus.map(function(d){
         var info = (d.paginas ? d.paginas + ' PÁG · ' : '') + d.trechos + ' TRECHOS';
@@ -261,6 +279,7 @@
     clearInterval(conTimer);
     conTimer = setInterval(function(){ if ($('ovCon').hidden) clearInterval(conTimer); else pintarCon(); }, 1500);
   });
+  $('idxAtualizar').addEventListener('click', function(){ chamar('indice_atualizar'); $('idxLista').innerHTML = '<div class="mu">Atualizando o mapa em segundo plano…</div>'; });
   $('conAdd').addEventListener('click', function(){ chamar('conhecimento_adicionar').then(pintarCon); });
   $('conDocs').addEventListener('click', function(ev){
     var b = ev.target.closest('[data-doc]');
@@ -293,10 +312,41 @@
       $('cAtiv').checked = !!g.ativacao_por_voz; $('cFalar').checked = !!g.responder_falando;
       $('cHolo').checked = g.holo_real !== false; $('cX').checked = g.x_esconde !== false;
       $('cOlhos').checked = !!g.olhos_ativos; $('cIni').checked = !!g.iniciar_com_windows;
-      $('cAtalho').value = g.atalho || 'ctrl+space';
+      $('cAtalho').value = g.atalho || 'ctrl+shift+space';
+      $('cAtalhoB').value = g.atalho_barra || 'ctrl+space';
+      $('cFotoOk').textContent = c.foto ? 'FOTO ESCOLHIDA' : 'NENHUMA FOTO AINDA';
+      pintarSis(g.sistemas_web || []);
       $('cIgn').value = (g.ignorar || []).join('\n');
       temaEscolhido = g.tema || 'Azul'; pintarTemas();
     });
+  });
+  function pintarSis(lista){
+    $('cSis').innerHTML = lista.map(function(s, i){
+      return '<div class="sis" data-i="' + i + '"><input class="n" type="text" aria-label="Nome do sistema" value="' + esc(s.nome) + '">' +
+             '<input class="u" type="text" aria-label="Endereço do sistema" value="' + esc(s.url) + '">' +
+             '<input class="p" type="hidden" value="' + esc(s.palavras || '') + '">' +
+             '<button type="button" class="chip" data-entrar="' + esc(s.nome) + '">ENTRAR</button>' +
+             '<button type="button" class="chip" data-tirar="' + i + '" aria-label="Remover">✕</button></div>';
+    }).join('') || '<small class="mu">Nenhum sistema cadastrado.</small>';
+  }
+  function lerSis(){
+    return Array.prototype.map.call(document.querySelectorAll('#cSis .sis'), function(d){
+      return {nome: d.querySelector('.n').value.trim(), url: d.querySelector('.u').value.trim(), palavras: d.querySelector('.p').value};
+    }).filter(function(s){ return s.nome && s.url; });
+  }
+  $('cSis').addEventListener('click', function(ev){
+    var b = ev.target.closest('button');
+    if (!b) return;
+    if (b.hasAttribute('data-entrar')){
+      chamar('sistemas_salvar', lerSis()).then(function(){ chamar('sistema_entrar', b.getAttribute('data-entrar')); });
+    } else if (b.hasAttribute('data-tirar')){
+      var l = lerSis(); l.splice(Number(b.getAttribute('data-tirar')), 1); pintarSis(l);
+    }
+  });
+  $('cSisAdd').addEventListener('click', function(){ var l = lerSis(); l.push({nome: 'Novo', url: 'http://', palavras: ''}); pintarSis(l); });
+  $('cFoto').addEventListener('click', function(){
+    $('cFotoOk').textContent = 'ESCOLHENDO…';
+    chamar('escolher_foto').then(function(ok){ $('cFotoOk').textContent = ok ? 'FOTO ESCOLHIDA — APARECE QUANDO O PC FICA PARADO' : 'NENHUMA FOTO ESCOLHIDA'; });
   });
   $('cTestar').addEventListener('click', function(){ chamar('testar_voz', $('cVoz').value); });
   $('cGravar').addEventListener('click', function(){ $('cAviso').textContent = 'Preparando…'; chamar('gravar_voz'); });
@@ -315,7 +365,8 @@
       ativacao_por_voz: $('cAtiv').checked, responder_falando: $('cFalar').checked,
       olhos_ativos: $('cOlhos').checked, iniciar_com_windows: $('cIni').checked,
       holo_real: $('cHolo').checked, x_esconde: $('cX').checked,
-      atalho: $('cAtalho').value.trim() || 'ctrl+space', ignorar: $('cIgn').value, tema: temaEscolhido
+      atalho: $('cAtalho').value.trim() || 'ctrl+shift+space', atalho_barra: $('cAtalhoB').value.trim() || 'ctrl+space',
+      sistemas_web: lerSis(), ignorar: $('cIgn').value, tema: temaEscolhido
     }).then(function(){ $('cOk').textContent = 'SALVO'; });
   });
 })();

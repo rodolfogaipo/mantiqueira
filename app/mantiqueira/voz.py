@@ -66,6 +66,8 @@ class Voz:
         self._latentes = {}
         self.falando = False
         self.tipo_atual = "—"
+        self._parar = False
+        self._ao_frase = lambda k, t: None
         threading.Thread(target=self._loop, daemon=True, name="voz").start()
 
     # ---------------------------------------------------------------- carregar
@@ -155,14 +157,32 @@ class Voz:
             pass
 
     # ---------------------------------------------------------------- falar
-    def falar(self, texto, voz_id=None):
+    def falar(self, texto, voz_id=None, ao_frase=None):
         texto = textutil.para_fala(texto or "")
         if texto:
-            self.q.put((texto, voz_id))
+            self.q.put((texto, voz_id, ao_frase))
+
+    def parar(self):
+        """Interrompe a fala na hora (Esc ou clique no núcleo)."""
+        import sounddevice as sd
+        self._parar = True
+        while not self.q.empty():
+            try:
+                _, _, cb = self.q.get_nowait()
+                if cb:
+                    cb(1, 1)
+            except Exception:
+                break
+        try:
+            sd.stop()
+        except Exception:
+            pass
 
     def _loop(self):
         while True:
-            texto, voz_id = self.q.get()
+            texto, voz_id, ao_frase = self.q.get()
+            self._parar = False
+            self._ao_frase = ao_frase or (lambda k, t: None)
             voz_id = voz_id or self.voz_padrao()
             self.falando = True
             try:
@@ -183,6 +203,10 @@ class Voz:
             except Exception:
                 log.exception("não foi possível falar")
             finally:
+                try:
+                    self._ao_frase(1, 1)
+                except Exception:
+                    pass
                 self.falando = False
                 if self.q.empty():
                     try:
@@ -210,6 +234,8 @@ class Voz:
             try:
                 with torch.inference_mode():
                     for f in frases:
+                        if self._parar:
+                            break
                         out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
                                                   top_k=50, top_p=0.85, speed=1.0, enable_text_splitting=False)
                         wav = np.asarray(out["wav"], dtype=np.float32)
@@ -222,10 +248,13 @@ class Voz:
         threading.Thread(target=gerar, daemon=True, name="voz-gerar").start()
         pausa = np.zeros(int(24000 * 0.12), dtype=np.float32)
         tocou = False
+        k = 0
         while True:
             a = fila.get()
-            if a is None:
+            if a is None or self._parar:
                 break
+            k += 1
+            self._ao_frase(k, len(frases))
             sd.play(np.concatenate([a, pausa]), 24000, blocking=True, latency="high")
             tocou = True
         if erro and not tocou:
@@ -242,7 +271,8 @@ class Voz:
                             "--length_scale", "0.95"], input=texto.encode("utf-8"), capture_output=True,
                            timeout=60, creationflags=sistema.SEM_JANELA, cwd=str(paths.PIPER_EXE.parent))
         audio = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
-        if audio.size:
+        if audio.size and not self._parar:
+            self._ao_frase(1, 1)
             self.tipo_atual = "RÁPIDA"
             sd.play(audio, taxa, blocking=True, latency="high")
 

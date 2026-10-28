@@ -167,6 +167,18 @@ def extrair_arquivo(processo: str, titulo: str):
     """Devolve (nome_do_arquivo_ou_pasta, nao_salvo) a partir do título da janela."""
     t = titulo or ""
     proc = (processo or "").lower()
+    if proc == "sldworks.exe":
+        # "SOLIDWORKS Premium 2025 SP1.2 - [Peça.SLDPRT *]" ou, editando esboço, "[3DSketch7 de PEÇA - MONTAGEM *]"
+        m = re.search(r"\[([^\[\]]+)\]\s*$", t)
+        if m:
+            dentro = m.group(1).strip()
+            ns = dentro.endswith("*")
+            dentro = re.sub(r"\s*\*\s*$", "", dentro)
+            dentro = re.sub(r"\s*\((somente leitura|read-only)\)\s*$", "", dentro, flags=re.I)
+            if " - " in dentro:
+                dentro = dentro.rsplit(" - ", 1)[1].strip()      # documento de cima (a montagem)
+            return dentro, ns
+        return None, False
     nao_salvo = t.lstrip().startswith("*")
     nome = None
     m = _RX_ARQ.search(t)

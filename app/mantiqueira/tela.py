@@ -47,7 +47,10 @@ def _ocr_rapid(caminho):
 
 
 def ler_tela(limite=3500):
-    caminho = capturar()
+    return ocr_arquivo(capturar(), limite)
+
+
+def ocr_arquivo(caminho, limite=4000):
     texto = ""
     try:
         texto = asyncio.run(_ocr_windows(caminho))

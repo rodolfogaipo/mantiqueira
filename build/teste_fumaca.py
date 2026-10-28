@@ -46,6 +46,8 @@ def _():
 @etapa("módulos da Mantiqueira")
 def _():
     from mantiqueira import config, db, textutil, sistema, ia, ouvido, voz, olhos, tela, cerebro, rotinas, nucleo, api  # noqa
+    from mantiqueira import indice, leitor, sistemas_web, memoria, frases, intencoes, holo  # noqa
+    import pystray  # noqa
 
 
 @etapa("IA local responde em JSON")
@@ -196,6 +198,52 @@ def _():
     seg = preparar_audio_voz(m4a, paths.DADOS / "voz_teste.wav")
     assert seg >= 3, seg
     print(f"::notice title=Holograma e voz::STL ok, categorias ok, áudio m4a convertido ({seg:.1f}s)", flush=True)
+
+
+@etapa("busca de arquivos, memória e curiosidades")
+def _():
+    import tempfile
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.indice import Indice
+    from mantiqueira.memoria import Memoria
+    from mantiqueira.frases import Frases
+    from mantiqueira.intencoes import Intencoes
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config()
+    n.db = Banco(paths.DADOS / "teste_intencoes.db")
+    n.olhos = None
+    n.sistemas = None
+    n.detalhe_texto = ""
+    n.contexto_extra = ""
+    n.indice = Indice(n)
+    n.memoria = Memoria(n)
+    n.frases = Frases(n.db)
+    pasta = Path(tempfile.mkdtemp())
+    for nome in ("Mesa Luna Oval 2,80X1,20.SLDASM", "Poltrona Balanço Brisa.SLDASM", "Orçamento Cliente Silva.xlsx"):
+        (pasta / "Projetos" / "Móveis").mkdir(parents=True, exist_ok=True)
+        (pasta / "Projetos" / "Móveis" / nome).write_bytes(b"x")
+    n.indice.varrer(str(pasta), "pc")
+    it = Intencoes(n)
+    relato = []
+    for frase in ("procura no computador a mesa luna oval", "procura a mesa lunna ovl", "onde está o orçamento do silva",
+                  "me conta uma curiosidade sobre madeira", "preciso de uma frase motivacional"):
+        r = it.tratar(frase, [])
+        relato.append(f"{frase} → {r}")
+        assert r, frase
+    assert "Luna" in relato[0] and "Luna" in relato[1] and "Silva" in relato[2], relato
+    n.memoria.adicionar("O Rodolfo trabalha com móveis de alumínio")
+    r = it.tratar("o que você sabe sobre mim?", [])
+    assert "alumínio" in n.detalhe_texto, n.detalhe_texto
+    r2 = it.tratar("esquece que eu trabalho com móveis de alumínio", [])
+    assert not n.memoria.todos(), r2
+    relato += [f"memória → {r}", f"esquecer → {r2}"]
+    print("\n".join(relato), flush=True)
+    print("::notice title=Busca e memória::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
 
 
 @etapa("conversas de teste (secretário)")

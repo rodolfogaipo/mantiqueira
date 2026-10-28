@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Mantiqueira — barra</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="estilo.css">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg2)}
+.barra{position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 10px 0 14px;
+  border:1px solid var(--p2);background:linear-gradient(90deg,rgba(var(--gl),.10),rgba(var(--gl),.02) 60%),var(--bg2);
+  box-shadow:inset 0 0 18px rgba(var(--gl),.18)}
+.nucleo{width:26px;height:26px;flex:none;border-radius:50%;border:2px solid var(--p);box-shadow:0 0 10px rgba(var(--gl),.7),inset 0 0 8px rgba(var(--gl),.6);
+  background:radial-gradient(circle,var(--hi) 0%,var(--p) 35%,transparent 70%);animation:pulsa 2.4s ease-in-out infinite}
+@keyframes pulsa{50%{box-shadow:0 0 18px rgba(var(--gl),.95),inset 0 0 10px rgba(var(--gl),.8)}}
+#q{flex:1;min-width:0;height:40px;background:transparent;border:none;border-bottom:1px solid var(--p3);outline:none;color:var(--hi);
+  font-family:var(--f-corpo,'Chakra Petch',sans-serif);font-size:17px;letter-spacing:.3px}
+#q::placeholder{color:var(--mu)}
+#q:focus{border-bottom-color:var(--p)}
+.dica{font-family:var(--f-mono,'Share Tech Mono',monospace);font-size:10px;letter-spacing:1.5px;color:var(--mu);white-space:nowrap}
+.bx{width:30px;height:30px;flex:none;background:transparent;border:1px solid var(--p3);color:var(--tx);cursor:pointer;font-size:13px}
+.bx:hover,.bx:focus-visible{border-color:var(--p);color:var(--hi);outline:none}
+</style>
+</head>
+<body>
+<div class="barra" id="barra">
+  <div class="nucleo" aria-hidden="true"></div>
+  <input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Fale com o Mantiqueira…" aria-label="Mensagem para o Mantiqueira">
+  <span class="dica">ENTER ENVIA · ESC FECHA</span>
+  <button type="button" class="bx" id="bFechar" aria-label="Fechar" title="Fechar (Esc)">✕</button>
+</div>
+<script src="comum.js"></script>
+<script>
+(function(){
+  var q = $('q');
+  function fechar(){ q.value = ''; chamar('esconder_barra'); }
+  q.addEventListener('keydown', function(ev){
+    if (ev.key === 'Enter'){
+      var t = q.value.trim();
+      if (!t) return;
+      q.value = '';
+      chamar('enviar', t, 'barra');           // a resposta vem só pela voz
+    } else if (ev.key === 'Escape'){
+      fechar();
+    }
+  });
+  $('bFechar').addEventListener('click', fechar);
+  window.addEventListener('focus', function(){ q.focus(); });
+  function tema(){ chamar('estado').then(function(e){ if (e && e.tema) aplicarTema(e.tema); }).catch(function(){}); }
+  tema(); setInterval(tema, 15000);
+  q.focus();
+})();
+</script>
+</body>
+</html>

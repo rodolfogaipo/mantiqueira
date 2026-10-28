@@ -49,7 +49,7 @@ class IA:
         tam = arquivo.stat().st_size / 2**20
         n = CAMADAS.get(qual, 32)
         livre = g["livre"] - 900                 # folga para o Windows, a voz e o SolidWorks
-        precisa = tam + 650                      # modelo + contexto
+        precisa = tam + 900                      # modelo + contexto (12 mil tokens)
         if livre >= precisa:
             return 99
         por_camada = tam / (n + 2)
@@ -72,7 +72,7 @@ class IA:
         threads = max(4, (os.cpu_count() or 8) // 2)
         for exe, camadas in tentativas:
             cmd = [str(exe), "-m", str(arquivo), "--host", "127.0.0.1", "--port", str(PORTA),
-                   "-c", "8192", "-ngl", str(camadas), "-t", str(threads), "--parallel", "1"]
+                   "-c", "12288", "-ngl", str(camadas), "-t", str(threads), "--parallel", "1"]
             log.info("iniciando IA: %s", " ".join(cmd))
             self._log = open(paths.DADOS / "ia.log", "ab")
             self.proc = subprocess.Popen(cmd, stdout=self._log, stderr=subprocess.STDOUT,

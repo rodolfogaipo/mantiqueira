@@ -44,6 +44,10 @@ class Nucleo:
         self.conhecimento = None
         self.holo = None
         self.saindo = False
+        self.indice = self.memoria = self.frases = self.sistemas = self.intencoes = None
+        self.detalhe_texto = ""          # lista de caminhos etc. mostrada na tela junto da resposta
+        self.contexto_extra = ""
+        self.janelas["barra"] = None
         self.latencia = None
         self.alerta = None
         self.janelas = {"main": None, "mini": None}
@@ -104,6 +108,20 @@ class Nucleo:
             self.conhecimento.importar_guias()
         self._passo("Carregando a base de conhecimento…", conhecimento)
 
+        def extras():
+            from .indice import Indice
+            from .memoria import Memoria
+            from .frases import Frases
+            from .sistemas_web import SistemasWeb
+            from .intencoes import Intencoes
+            self.memoria = Memoria(self)
+            self.frases = Frases(self.db)
+            self.sistemas = SistemasWeb(self)
+            self.intencoes = Intencoes(self)
+            self.indice = Indice(self)
+            self.indice.iniciar()
+        self._passo("Preparando memória e mapa de arquivos…", extras)
+
         self.cerebro = Cerebro(self)
 
         def ia():
@@ -122,7 +140,8 @@ class Nucleo:
         def atalho():
             import keyboard
             keyboard.add_hotkey(self.cfg["atalho"], self.ouvir_agora, suppress=False)
-        self._passo("Registrando o atalho…", atalho)
+            keyboard.add_hotkey(self.cfg["atalho_barra"], self.alternar_barra, suppress=False)
+        self._passo("Registrando os atalhos…", atalho)
 
         threading.Thread(target=self.rotinas.loop_lembretes, daemon=True, name="lembretes").start()
         threading.Thread(target=self.rotinas.loop_pendencias, daemon=True, name="pendencias").start()
@@ -133,11 +152,11 @@ class Nucleo:
         self.estado = "ocioso"
         self.boot_msg = ""
         log.info("Mantiqueira pronta. Erros: %s", self.erros)
-        time.sleep(1.5)
+        time.sleep(1.0)
         try:
-            self.rotinas._bom_dia_se_preciso()
+            self.falar_aviso(self.rotinas.boas_vindas())
         except Exception:
-            log.exception("bom dia falhou")
+            log.exception("boas-vindas falhou")
 
     # ================================================================== conversa
     def ouvir_agora(self):
@@ -186,15 +205,43 @@ class Nucleo:
 
     def _processar(self, texto, origem):
         self.estado = "pensando"
-        self.ultima = {"usuario": texto, "assistente": ""}
+        self.ultima = {"usuario": texto, "assistente": "", "detalhe": ""}
+        self.detalhe_texto = ""
         self.db.conversa_add("usuario", texto)
-        resposta = self.cerebro.processar(texto) if self.cerebro else "Ainda estou iniciando."
-        self.ultima["assistente"] = resposta
-        self.db.conversa_add("assistente", resposta)
-        if self.voz and (self.cfg["responder_falando"] or origem == "voz"):
-            self.voz.falar(resposta)
+        try:
+            resposta = self.cerebro.processar(texto) if self.cerebro else "Ainda estou iniciando."
+        except Exception:
+            log.exception("processar")
+            resposta = "Desculpe, tive um problema agora. Pode repetir?"
+        self.db.conversa_add("assistente", resposta + (("\n" + self.detalhe_texto) if self.detalhe_texto else ""))
+        detalhe = self.detalhe_texto
+        if self.voz and (self.cfg["responder_falando"] or origem in ("voz", "barra")):
+            self._mostrar_junto_da_voz(resposta, detalhe)
         else:
+            self.ultima.update(assistente=resposta, detalhe=detalhe)
             self._liberar()
+
+    def _mostrar_junto_da_voz(self, texto, detalhe=""):
+        """O texto aparece na tela frase por frase, conforme a voz vai falando."""
+        import re as _re
+        frases = [f for f in _re.split(r"(?<=[.!?…])\s+", texto) if f.strip()] or [texto]
+
+        def ao_frase(k, total):
+            n = max(1, min(len(frases), round(k / max(1, total) * len(frases))))
+            self.ultima["assistente"] = " ".join(frases[:n])
+            if k >= total:
+                self.ultima["assistente"] = texto
+                self.ultima["detalhe"] = detalhe
+        self.voz.falar(texto, ao_frase=ao_frase)
+
+    def parar_fala(self):
+        if self.voz:
+            self.voz.parar()
+        if self.ultima.get("assistente") is not None and self.cerebro and self.cerebro.historico:
+            ult = self.cerebro.historico[-1]
+            if ult["role"] == "assistant":
+                self.ultima["assistente"] = ult["content"]
+                self.ultima["detalhe"] = self.detalhe_texto
 
     def _liberar(self):
         self.estado = "ocioso"
@@ -215,10 +262,51 @@ class Nucleo:
             self.ouvir_agora()
 
     def falar_aviso(self, texto):
-        self.ultima = {"usuario": "", "assistente": texto}
+        self.ultima = {"usuario": "", "assistente": "", "detalhe": ""}
         self.db.conversa_add("assistente", texto)
         if self.voz:
-            self.voz.falar(texto)
+            self._mostrar_junto_da_voz(texto)
+        else:
+            self.ultima["assistente"] = texto
+
+    # ================================================================== barra rápida
+    def alternar_barra(self):
+        w = self.janelas.get("barra")
+        if not w:
+            return
+        try:
+            if getattr(self, "_barra_visivel", False):
+                w.hide()
+                self._barra_visivel = False
+                return
+            w.show()
+            self._barra_visivel = True
+            threading.Thread(target=self._focar_barra, daemon=True).start()
+        except Exception:
+            log.exception("barra")
+
+    def _focar_barra(self):
+        import ctypes
+        time.sleep(0.15)
+        u = ctypes.windll.user32
+        hwnd = u.FindWindowW(None, "Mantiqueira — barra")
+        if hwnd:
+            u.keybd_event(0x12, 0, 0, 0)          # ALT: libera o Windows a trazer a janela para frente
+            u.keybd_event(0x12, 0, 2, 0)
+            u.SetForegroundWindow(hwnd)
+        try:
+            self.janelas["barra"].evaluate_js("document.getElementById('q').focus()")
+        except Exception:
+            pass
+
+    def esconder_barra(self):
+        w = self.janelas.get("barra")
+        if w:
+            try:
+                w.hide()
+            except Exception:
+                pass
+        self._barra_visivel = False
 
     def alertar_lembrete(self, l, repeticao=0):
         """Avisa um lembrete: toque + voz primeiro; a janelinha abre em paralelo (uma coisa não trava a outra)."""
@@ -395,7 +483,8 @@ class Nucleo:
             "sub": sub, "agenda": agenda, "foco": foco, "pendencias": pend,
             "registro": self.olhos.registro_recente(4) if self.olhos else [],
             "holo": self._holo_ui(),
-            "ultima": self.ultima, "alerta": self.alerta, "aviso_gravacao": self.aviso_gravacao,
+            "ultima": self.ultima, "alerta": self.alerta,
+            "indice": (self.indice.resumo() if self.indice else []), "aviso_gravacao": self.aviso_gravacao,
             "palavra": "MANTIQUEIRA", "atalho": cfg["atalho"].upper().replace("SPACE", "ESPAÇO"),
             "ativacao": bool(cfg["ativacao_por_voz"]),
         }

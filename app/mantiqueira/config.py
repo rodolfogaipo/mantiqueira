@@ -14,13 +14,17 @@ PADRAO = {
     "microfone": None,              # None = microfone padrão do Windows
     "ativacao_por_voz": True,
     "palavras_ativacao": ["mantiqueira"],
-    "atalho": "ctrl+space",
+    "atalho": "ctrl+shift+space",   # segurar para falar (microfone)
+    "atalho_barra": "ctrl+space",   # abre a barra rápida de digitar
     "responder_falando": True,
     "olhos_ativos": True,
     "modo_ia": "normal",            # normal | turbo | auto
     "iniciar_com_windows": False,
     "holo_real": True,              # holograma 3D da peça aberta no SolidWorks
     "x_esconde": True,              # o X da janela esconde em vez de fechar
+    "sistemas_web": [{"nome": "CNPs", "url": "http://192.168.1.96:8080/cnp/cnps",
+                      "palavras": "cnp cnps"}],
+    "versao_config": 2,
     "ignorar": [
         "banco", "bank", "senha", "password", "keepass", "bitwarden", "1password",
         "inprivate", "anônima", "anonima", "incognito", "nubank", "itaú", "itau",
@@ -39,8 +43,15 @@ class Config:
             if self.arquivo.exists():
                 salvo = json.loads(self.arquivo.read_text(encoding="utf-8"))
                 self.dados.update({k: v for k, v in salvo.items() if k in PADRAO})
+                if "versao_config" not in salvo:
+                    self.dados["versao_config"] = 1
         except Exception:
             log.exception("config.json inválido; usando padrão")
+        if self.dados.get("versao_config", 1) < 2:
+            # 1.4: Ctrl+Espaço passou a abrir a barra rápida; falar ficou com Ctrl+Shift+Espaço
+            if self.dados.get("atalho") == "ctrl+space":
+                self.dados["atalho"] = "ctrl+shift+space"
+            self.dados["versao_config"] = 2
         self.salvar()
 
     def __getitem__(self, k):

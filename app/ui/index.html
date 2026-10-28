@@ -99,17 +99,19 @@
   <div id="fInfo" class="mono finfo"> </div>
 </section>
 
-<section id="pendBox" class="abs dir" style="left:1060px;top:496px;width:340px" hidden>
+<section id="pendBox" class="abs dir" style="left:1060px;top:470px;width:340px" hidden>
   <div class="ph al"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1 L13 13 H1 Z M7 5 V9 M7 10.5 V11.5" fill="none" style="stroke:var(--al)" stroke-width="1.4"/></svg><span class="aglow">PENDÊNCIA</span><span class="ln" style="background:linear-gradient(90deg,var(--al),transparent)"></span><span id="pendN" class="al"></span></div>
   <div id="pendTxt" class="pendtxt"></div>
   <div class="botoes">
-    <button type="button" class="btn btnA" id="pAbrir">ABRIR AGORA</button>
+    <button type="button" class="btn btnA" id="pAbrir" title="Traz a janela do arquivo para frente">IR PARA ELE</button>
     <button type="button" class="btn" id="pAdiar">LEMBRAR EM 1H</button>
     <button type="button" class="btn" id="pOk">JÁ RESOLVI</button>
   </div>
+  <div id="pendMsg" class="mono mu pendmsg">
+  </div>
 </section>
 
-<section class="abs dir" style="left:1060px;top:672px;width:340px">
+<section class="abs dir" style="left:1060px;top:690px;width:340px">
   <div class="ph"><span class="brilho">// REGISTRO DE HOJE</span><span class="ln"></span></div>
   <div id="reg" class="mono registro"></div>
 </section>
@@ -118,7 +120,8 @@
   <div class="eq" id="eq" aria-hidden="true"></div>
   <div class="conversa">
     <div id="uLine" class="mono uline"> </div>
-    <div id="aLine" class="brilho aline"> </div>
+    <div id="aLine" class="brilho aline" title="Clique no núcleo ou aperte Esc para eu parar de falar"> </div>
+    <div id="dLine" class="mono dline" hidden></div>
   </div>
   <form id="cmdf" class="cmd" autocomplete="off" title="Clique e digite">
     <span class="mono brilho seta">›</span>
@@ -157,6 +160,8 @@
     <div class="linha"><button type="button" class="btn btnA" id="conAdd">ADICIONAR ARQUIVOS</button><span id="conStatus" class="mono mu conStatus"></span></div>
     <div class="ph" style="margin-top:22px"><span>SEUS DOCUMENTOS</span><span class="ln"></span><span id="conN" class="mu"></span></div>
     <div id="conDocs" class="conLista"></div>
+    <div class="ph" style="margin-top:14px"><span class="brilho">// MAPA DE ARQUIVOS (COMPUTADOR, PENDRIVE E REDE)</span><span class="ln"></span><button type="button" class="chip" id="idxAtualizar">ATUALIZAR AGORA</button></div>
+    <div id="idxLista" class="conLista mono"></div>
     <div class="ph" style="margin-top:22px"><span>GUIAS QUE JÁ VÊM COM ELE</span><span class="ln"></span></div>
     <div id="conGuias" class="conLista"></div>
   </div>
@@ -177,6 +182,14 @@
           <small id="cAviso" class="mu">Para a voz ficar mais humana e com sotaque brasileiro: grave no celular 20 a 30 segundos de alguém (que autorize) lendo um texto com calma, num lugar silencioso. Pode ser áudio do WhatsApp ou do gravador. Passe o arquivo para o PC e clique em USAR ÁUDIO DO CELULAR.</small>
         </div>
         <label class="campo"><span>Microfone</span><select id="cMic"></select></label>
+        <div class="campo"><span>Foto do holograma (quando estou parado)</span>
+          <div class="linha"><button type="button" class="chip" id="cFoto">ESCOLHER FOTO</button><small id="cFotoOk" class="mu"></small></div>
+        </div>
+        <div class="campo"><span>Sistemas da empresa (só leitura)</span>
+          <div id="cSis" class="sisLista"></div>
+          <div class="linha"><button type="button" class="chip" id="cSisAdd">+ ADICIONAR SISTEMA</button></div>
+          <small class="mu">Clique em ENTRAR uma vez para fazer o login; o Mantiqueira guarda a sessão e passa a consultar sozinho. Depois pergunte, por exemplo: "quais CNPs tem no programa?"</small>
+        </div>
         <label class="campo"><span>Modo da IA</span>
           <select id="cModo"><option value="normal">Normal — rápida, convive com o SolidWorks</option><option value="turbo">Turbo — mais inteligente, um pouco mais lenta</option><option value="auto">Automático — turbo quando o SolidWorks estiver fechado</option></select>
         </label>
@@ -188,7 +201,8 @@
         <label class="check"><input id="cIni" type="checkbox"><span>Abrir junto com o Windows</span></label>
         <label class="check"><input id="cHolo" type="checkbox"><span>Holograma 3D da peça aberta no SolidWorks</span></label>
         <label class="check"><input id="cX" type="checkbox"><span>O X só minimiza (continua avisando)</span></label>
-        <label class="campo"><span>Atalho para falar</span><input id="cAtalho" type="text" placeholder="ctrl+space"></label>
+        <label class="campo"><span>Atalho para falar</span><input id="cAtalho" type="text" placeholder="ctrl+shift+space"></label>
+        <label class="campo"><span>Atalho da barra rápida</span><input id="cAtalhoB" type="text" placeholder="ctrl+space"></label>
         <div class="campo"><span>Cor</span><div id="cTemas" class="temas"></div></div>
         <label class="campo"><span>Nunca registrar janelas com estas palavras (uma por linha)</span><textarea id="cIgn" rows="5"></textarea></label>
         <div class="linha"><button type="button" class="btn btnA" id="cSalvar">SALVAR</button><button type="button" class="btn" id="cTesteAviso">TESTAR AVISO</button><span id="cOk" class="mono mu"></span></div>

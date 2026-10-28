@@ -109,7 +109,36 @@ class Cerebro:
             if achados:
                 partes.append("TRECHOS DA BASE DE CONHECIMENTO (guias de programas e documentos do usuário):\n" +
                               "\n\n".join(f"[{a['nome']} — {a['titulo']}]\n{a['texto'][:850]}" for a in achados))
-        return "\n\n".join(partes)
+        mem = getattr(n, "memoria", None)
+        if mem:
+            try:
+                fatos = mem.relevantes(pergunta)
+                if fatos:
+                    partes.insert(2, "O QUE VOCÊ JÁ SABE SOBRE O USUÁRIO (memória de longo prazo):\n" + "\n".join(f"- {f}" for f in fatos))
+                hab = mem.habitos()
+                if hab:
+                    partes.insert(3, "HÁBITOS DO USUÁRIO: " + hab)
+            except Exception:
+                log.exception("memória")
+        try:
+            from . import leitor
+            partes += leitor.contexto(pergunta)
+        except Exception:
+            log.exception("leitor")
+        sw = getattr(n, "sistemas", None)
+        if sw:
+            try:
+                _, txt = sw.contexto(pergunta)
+                if txt:
+                    partes.append(txt)
+            except Exception:
+                log.exception("sistemas web")
+        extra = getattr(n, "contexto_extra", "")
+        if extra:
+            partes.append(extra)
+            n.contexto_extra = ""
+        texto = "\n\n".join(partes)
+        return texto[-26000:] if len(texto) > 26000 else texto
 
     def _sistema(self, pergunta):
         cfg = self.n.cfg
@@ -117,9 +146,12 @@ class Cerebro:
         return f"""Você é o Mantiqueira, assistente pessoal e secretário de {cfg['nome']}. Você é masculino: fale de si mesmo no masculino ("estou pronto", "fiquei sabendo", "o Mantiqueira").
 Você roda 100% offline no computador dele. Fale em português do Brasil, com educação, calma e jeito de um secretário experiente: atencioso, prático, um pouco formal.
 Chame o usuário de "{t}". O seu nome é Mantiqueira; o usuário NÃO se chama Mantiqueira.
-Suas respostas serão FALADAS: 1 a 3 frases curtas (até 5 quando estiver explicando como fazer algo num programa), sem listas, sem markdown, sem emojis.
+Suas respostas serão FALADAS, então escreva como se fala: sem listas, sem markdown, sem emojis, sem símbolos.
+O TAMANHO da resposta acompanha a pergunta: pergunta simples ou conversa = 1 a 2 frases. Quando ele pedir explicação, "como faço", "me explica", "detalha" ou "explica melhor" = explique de verdade, passo a passo, em frases completas ("Primeiro…", "Depois…", "Por último…"), com o que clicar, o que conferir e um cuidado comum; até umas 12 frases. Se ele disser "resume", seja breve. Sempre de forma fácil de entender.
 Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
 Sobre o que ele fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
+NUNCA diga onde um arquivo está guardado se isso não estiver nos dados abaixo: diga que pode procurar ("quer que eu procure no computador ou na rede?").
+Quando houver DADOS DAS PLANILHAS ABERTAS, DOCUMENTOS DO WORD, SOLIDWORKS ou SISTEMA DA EMPRESA abaixo, responda com esses valores exatos e diga de onde tirou (qual planilha/aba ou sistema). Para somas, use os "Totais das colunas" já calculados.
 Para dúvidas sobre programas (SolidWorks, AutoCAD, SketchUp, 3ds Max, Aspire, CypCut, Office) e sobre os documentos dele, use os TRECHOS DA BASE DE CONHECIMENTO quando houver: diga o nome do comando, o atalho e onde fica no menu. Se não houver trecho e você não tiver certeza, diga que não tem certeza em vez de inventar um comando.
 
 Responda SEMPRE em JSON com os campos:
@@ -165,11 +197,18 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 self._guardar(pergunta, resp)
                 return resp
 
+        intents = getattr(n, "intencoes", None)
+        if intents:
+            direto = intents.tratar(pergunta, self.historico)
+            if direto:
+                self._guardar(pergunta, direto)
+                return direto
+
         msgs = [{"role": "system", "content": self._sistema(pergunta)}] + self.historico[-8:] + \
                [{"role": "user", "content": pergunta}]
         t0 = time.time()
         try:
-            r = n.ia.conversar(msgs, ESQUEMA)
+            r = n.ia.conversar(msgs, ESQUEMA, max_tokens=900)
         except Exception:
             log.exception("IA falhou")
             return "Desculpe, tive um problema para pensar agora. Pode repetir?"
@@ -200,6 +239,10 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
     def _guardar(self, pergunta, resposta):
         self.historico += [{"role": "user", "content": pergunta}, {"role": "assistant", "content": resposta}]
         self.historico = self.historico[-12:]
+        mem = getattr(self.n, "memoria", None)
+        if mem:
+            import threading
+            threading.Thread(target=mem.extrair, args=(pergunta,), daemon=True, name="memoria").start()
 
     def _ultimo_perguntou_quando(self):
         if not self.historico:

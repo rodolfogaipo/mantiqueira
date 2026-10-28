@@ -25,7 +25,7 @@ var Holograma = (function(){
     function quadro(t){
       var dt = Math.min(0.05, (t - (self.tAnt || t)) / 1000); self.tAnt = t;
       self.ang += dt * 0.55;
-      self.raiz.rotation.y = self.ang;
+      self.raiz.rotation.y = self.balanco ? Math.sin(t / 1000 * 0.45) * 0.42 : self.ang;
       if (self.anim) self.anim((t - self.t0) / 1000, dt);
       self.renderer.render(self.cena, self.camera);
       if (self.rotulo) self.rotulo.textContent = 'ROT ' + String(Math.round((self.ang * 180 / Math.PI) % 360)).padStart(3, '0') + '°';
@@ -73,6 +73,7 @@ var Holograma = (function(){
     this.mats.forEach(function(m){ m.dispose(); });
     this.mats = [];
     this.anim = null;
+    this.balanco = false;
   };
   Holo.prototype.base = function(raio){
     var anel = new T.Mesh(new T.RingGeometry(raio * 0.98, raio, 64), this.matFace(0.35));
@@ -88,6 +89,11 @@ var Holograma = (function(){
     if (chave === this.chave) return;
     this.chave = chave;
     var self = this;
+    if (tipo === 'foto' && url){
+      new T.TextureLoader().load(url, function(tex){ if (self.chave === chave) self.foto(tex); },
+                                 undefined, function(){ if (self.chave === chave) self.ilustracao('logo'); });
+      return;
+    }
     if (tipo === 'real' && url){
       fetch(url).then(function(r){ if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
         .then(function(buf){ if (self.chave === chave) self.real(new Float32Array(buf)); })
@@ -113,6 +119,60 @@ var Holograma = (function(){
     g.position.y = -0.62 + h / 2 + 0.02;
     this.anim = function(t){ g.position.y = -0.6 + h / 2 + Math.sin(t * 1.4) * 0.03; };
   };
+
+  /* ---------------------------------------------------------- foto como holograma */
+  Holo.prototype.foto = function(tex){
+    this.limpar();
+    this.balanco = true;
+    var img = tex.image, asp = img.width / img.height;
+    var w = asp >= 1 ? 2.1 : 2.1 * asp, h = w / asp;
+    if (h > 1.4){ h = 1.4; w = h * asp; }
+    var geo = new T.PlaneGeometry(w, h, 160, Math.round(160 / asp));
+    var self = this;
+    var mat = new T.ShaderMaterial({
+      uniforms: {mapa: {value: tex}, cor: {value: this.cor}, tempo: {value: 0}},
+      vertexShader: [
+        'uniform sampler2D mapa; uniform float tempo; varying vec2 vUv; varying float vLum;',
+        'void main(){ vUv = uv; vec3 c = texture2D(mapa, uv).rgb; vLum = dot(c, vec3(0.299, 0.587, 0.114));',
+        '  vec3 p = position; p.z += vLum * 0.28;',                                  // relevo: o claro vem para frente
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }'].join('\n'),
+      fragmentShader: [
+        'uniform sampler2D mapa; uniform vec3 cor; uniform float tempo; varying vec2 vUv; varying float vLum;',
+        'void main(){',
+        '  float l = vLum;',
+        '  float linhas = 0.72 + 0.28 * sin(vUv.y * 420.0 - tempo * 6.0);',          // linhas de varredura
+        '  float faixa = smoothstep(0.0, 0.04, abs(fract(vUv.y - tempo * 0.12) - 0.5) - 0.46);',
+        '  float borda = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(1.0, 0.92, vUv.y);',
+        '  float pisca = 0.93 + 0.07 * sin(tempo * 23.0) * sin(tempo * 7.0);',
+        '  vec3 c = mix(cor * 0.35, vec3(0.92, 0.97, 1.0), pow(l, 1.6)) * (0.25 + l * 1.25);',
+        '  c += cor * (1.0 - faixa) * 0.35;',
+        '  gl_FragColor = vec4(c * linhas * pisca, (0.25 + l * 0.85) * borda);',
+        '}'].join('\n'),
+      transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide
+    });
+    this.mats.push(mat);
+    var plano = new T.Mesh(geo, mat);
+    plano.position.y = 0.08;
+    this.raiz.add(plano);
+    // moldura e base de projeção
+    var moldura = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(w + 0.06, h + 0.06)), this.matLinha(0.6));
+    moldura.position.y = 0.08; this.raiz.add(moldura);
+    this.raiz.add(this.base(1.25));
+    var n = 90, pos = new Float32Array(n * 3), vel = [];
+    for (var i = 0; i < n; i++){ pos[i*3] = (Math.random() - 0.5) * w; pos[i*3+1] = -0.62 + Math.random() * (h + 0.8); pos[i*3+2] = (Math.random() - 0.5) * 0.5; vel.push(0.08 + Math.random() * 0.2); }
+    var gp = new T.BufferGeometry(); gp.setAttribute('position', new T.BufferAttribute(pos, 3));
+    var pm = new T.PointsMaterial({color: this.cor.clone(), size: 0.02, transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false});
+    this.mats.push(pm);
+    this.raiz.add(new T.Points(gp, pm));
+    var topo = 0.08 + h / 2 + 0.2;
+    this.anim = function(t, dt){
+      mat.uniforms.tempo.value = t;
+      mat.uniforms.cor.value = self.cor;
+      for (var k = 0; k < n; k++){ pos[k*3+1] += vel[k] * dt; if (pos[k*3+1] > topo) pos[k*3+1] = -0.62; }
+      gp.attributes.position.needsUpdate = true;
+    };
+  };
+  Holo.prototype.setCorShader = function(){};
 
   /* ---------------------------------------------------------- ilustrações */
   Holo.prototype.ilustracao = function(tipo){

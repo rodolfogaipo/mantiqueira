@@ -76,7 +76,19 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .farq{font-size:14px;color:var(--al);margin-top:2px;overflow-wrap:anywhere}
 .finfo{font-size:11px;letter-spacing:1px;color:var(--mu);margin-top:4px}
 
-.pendtxt{margin-top:10px;font-size:16px;line-height:1.4;color:var(--hi)}
+.pendtxt{margin-top:10px;font-size:15px;line-height:1.4;color:var(--hi);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+#pendBox .botoes{flex-wrap:nowrap;gap:6px;margin-top:10px}
+#pendBox .btn{min-height:32px;padding:0 9px;font-size:11px;letter-spacing:1px;white-space:nowrap;flex:1 1 auto}
+.pendmsg{font-size:11px;margin-top:6px;min-height:14px}
+.dline{margin-top:8px;font-size:12px;line-height:1.6;color:var(--tx);white-space:pre-wrap;max-height:58px;overflow-y:auto;border-left:2px solid var(--p3);padding-left:10px;user-select:text;text-align:left}
+.conversa:has(.dline:not([hidden])) .aline{max-height:52px}
+.hsvg{cursor:pointer}
+.sisLista{display:flex;flex-direction:column;gap:6px;margin:4px 0 6px}
+.sis{display:flex;gap:6px;align-items:center}
+.sis input{min-width:0}
+.sis .n{flex:0 0 110px}
+.sis .u{flex:1}
+
 .registro{margin-top:8px;font-size:12px;line-height:1.85;color:var(--tx)}
 .registro div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 

@@ -21,8 +21,19 @@ class Api:
             log.exception("estado")
             return {"pronto": False, "boot": f"Erro: {e}", "estado": "carregando"}
 
-    def enviar(self, texto):
-        self._n.processar_texto_async(texto, "texto")
+    def enviar(self, texto, origem="texto"):
+        origem = origem if origem in ("texto", "barra") else "texto"
+        if origem == "barra":
+            self._n.esconder_barra()
+        self._n.processar_texto_async(texto, origem)
+        return True
+
+    def parar_fala(self):
+        self._n.parar_fala()
+        return True
+
+    def esconder_barra(self):
+        self._n.esconder_barra()
         return True
 
     def ouvir(self):
@@ -62,16 +73,84 @@ class Api:
         p = db.pendencia(int(id_))
         if not p:
             return False
-        if acao == "abrir" and p["arquivo"] and self._n.olhos:
-            caminho = self._n.olhos.recentes.achar(p["arquivo"])
-            if caminho:
-                os.startfile(caminho)
-                return True
-            return False
+        if acao == "abrir" and p["arquivo"]:
+            return self._ir_para(p["arquivo"])
         if acao == "adiar":
             db.pendencia_status(p["id"], "adiada", adiar_min=60)
         else:
             db.pendencia_status(p["id"], "resolvida")
+        return True
+
+    def _ir_para(self, arquivo):
+        """Traz para frente a janela que já tem o arquivo aberto; se não houver, abre o arquivo."""
+        import ctypes
+        from . import leitor
+        tronco = os.path.splitext(os.path.basename(arquivo))[0].lower()
+        u = ctypes.windll.user32
+        for hwnd, _proc, titulo in leitor.janelas_abertas():
+            if tronco and tronco in titulo.lower() and not titulo.startswith("Mantiqueira"):
+                if u.IsIconic(hwnd):
+                    u.ShowWindow(hwnd, 9)
+                u.keybd_event(0x12, 0, 0, 0)
+                u.keybd_event(0x12, 0, 2, 0)
+                u.SetForegroundWindow(hwnd)
+                return True
+        caminho = None
+        if self._n.olhos:
+            try:
+                caminho = self._n.olhos.recentes.achar(arquivo)
+            except Exception:
+                caminho = None
+        if not caminho and self._n.indice:
+            caminho = self._n.indice.achar(arquivo)
+        if caminho:
+            os.startfile(caminho)
+            return True
+        return False
+
+    # --------------------------------------------------------------- foto do holograma e sistemas
+    def escolher_foto(self):
+        import webview
+        w = self._n.janelas.get("main")
+        tipo = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
+        r = w.create_file_dialog(tipo, file_types=("Imagens (*.jpg;*.jpeg;*.png;*.webp;*.bmp)", "Todos os arquivos (*.*)")) if w else None
+        if not r or not self._n.holo:
+            return False
+        try:
+            self._n.holo.definir_foto(r[0])
+            return True
+        except Exception:
+            log.exception("foto")
+            return False
+
+    def sistemas_lista(self):
+        return list(self._n.cfg["sistemas_web"])
+
+    def sistemas_salvar(self, lista):
+        limpa = []
+        for s in lista or []:
+            nome, url = str(s.get("nome", "")).strip(), str(s.get("url", "")).strip()
+            if nome and url.startswith(("http://", "https://")):
+                limpa.append({"nome": nome, "url": url, "palavras": str(s.get("palavras", "")).strip()})
+        self._n.cfg.atualizar({"sistemas_web": limpa})
+        return True
+
+    def sistema_entrar(self, nome):
+        sw = self._n.sistemas
+        if not sw:
+            return False
+        for s in self._n.cfg["sistemas_web"]:
+            if s["nome"] == nome:
+                sw.abrir_para_login(s)
+                return True
+        return False
+
+    def indice_resumo(self):
+        return self._n.indice.resumo() if self._n.indice else {}
+
+    def indice_atualizar(self):
+        if self._n.indice:
+            self._n.indice.atualizar_agora()
         return True
 
     # --------------------------------------------------------------- janelas
@@ -135,6 +214,7 @@ class Api:
             "voz_atual": n.voz.voz_padrao() if n.voz else "",
             "microfones": Ouvido.microfones(),
             "turbo": bool(n.ia and n.ia.turbo_disponivel()),
+            "foto": bool(n.holo and n.holo.foto_versao),
         }
 
     def salvar_config(self, novos):
@@ -149,17 +229,23 @@ class Api:
                 novos["microfone"] = int(novos["microfone"])
             except (TypeError, ValueError):
                 novos["microfone"] = None
+        if "sistemas_web" in novos:
+            novos["sistemas_web"] = [{"nome": str(x.get("nome", "")).strip(), "url": str(x.get("url", "")).strip(),
+                                      "palavras": str(x.get("palavras", "")).strip()} for x in novos["sistemas_web"] or []
+                                     if str(x.get("nome", "")).strip() and len(str(x.get("url", "")).strip()) > 10
+                                     and str(x.get("url", "")).strip().startswith(("http://", "https://"))]
         n.cfg.atualizar(novos)
         if novos.get("microfone", antes["microfone"]) != antes["microfone"] and n.ouvido:
             n.ouvido.reiniciar_microfone()
         if "iniciar_com_windows" in novos and novos["iniciar_com_windows"] != antes["iniciar_com_windows"]:
             threading.Thread(target=sistema.iniciar_com_windows, args=(bool(novos["iniciar_com_windows"]),),
                              daemon=True).start()
-        if "atalho" in novos and novos["atalho"] != antes["atalho"]:
+        if any(k in novos and novos[k] != antes.get(k) for k in ("atalho", "atalho_barra")):
             try:
                 import keyboard
                 keyboard.clear_all_hotkeys()
                 keyboard.add_hotkey(n.cfg["atalho"], n.ouvir_agora, suppress=False)
+                keyboard.add_hotkey(n.cfg["atalho_barra"], n.alternar_barra, suppress=False)
             except Exception:
                 log.exception("atalho")
         return True

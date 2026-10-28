@@ -68,6 +68,9 @@ def ler_stl(caminho):
     return np.array(vals, dtype=np.float32).reshape(-1, 9)
 
 
+FOTO = paths.DADOS / "foto_holograma.jpg"
+
+
 class Holo:
     def __init__(self, nucleo):
         self.n = nucleo
@@ -75,6 +78,7 @@ class Holo:
         self._doc_chave = None
         self._ocupado = False
         self._falhas = {}
+        self._tipo_doc = {}        # documento → "desenho"/"montagem"/"peca" (descoberto pelo SolidWorks)
         PASTA_UI.mkdir(parents=True, exist_ok=True)
         PASTA_TMP.mkdir(parents=True, exist_ok=True)
         for f in PASTA_UI.glob("*.bin"):
@@ -82,12 +86,37 @@ class Holo:
                 f.unlink()
             except Exception:
                 pass
+        self.publicar_foto()
+
+    # ------------------------------------------------------------------ foto (pai e filho)
+    def publicar_foto(self):
+        if FOTO.exists():
+            import shutil
+            shutil.copyfile(FOTO, PASTA_UI / "foto.jpg")
+            self.foto_versao = int(FOTO.stat().st_mtime)
+        else:
+            self.foto_versao = None
+
+    def definir_foto(self, origem):
+        from PIL import Image, ImageOps
+        img = ImageOps.exif_transpose(Image.open(origem)).convert("RGB")
+        img.thumbnail((900, 900))
+        img.save(FOTO, quality=90)
+        self.publicar_foto()
+
+    def ocioso(self):
+        if self.foto_versao:
+            return {"tipo": "foto", "chave": f"foto:{self.foto_versao}", "url": f"_holo/foto.jpg?v={self.foto_versao}"}
+        return {"tipo": "logo", "chave": "logo"}
 
     def estado(self, foco, inativo):
         """Chamado pela tela: o que o painel deve mostrar agora."""
         if inativo or not foco:
-            return {"tipo": "familia", "chave": "familia"}
+            return self.ocioso()
         cat = categoria(foco)
+        doc = foco.get("arquivo") or ""
+        if cat in ("peca", "montagem", "chapa") and doc in self._tipo_doc:
+            cat = self._tipo_doc[doc]
         if cat in ("peca", "montagem", "chapa") and self.n.cfg["holo_real"]:
             chave = (foco.get("arquivo") or "") + ("*" if foco.get("nao_salvo") else "")
             if self.atual and self.atual.get("arquivo") == foco.get("arquivo") and self.atual.get("tipo") == "real":
@@ -117,10 +146,11 @@ class Holo:
                     return
                 tipo = doc.GetType()              # 1 peça, 2 montagem, 3 desenho
                 titulo = str(doc.GetTitle() or "")
+                if arquivo:
+                    self._tipo_doc[arquivo] = {1: "peca", 2: "montagem", 3: "desenho"}.get(tipo, "peca")
                 if tipo not in (1, 2):
+                    self._falhas[arquivo] = 9      # desenho 2D: fica a ilustração
                     return
-                if arquivo and os.path.splitext(arquivo)[0].lower() not in titulo.lower():
-                    return                        # o documento ativo mudou
                 if tipo == 2:
                     try:
                         if doc.GetComponentCount(False) > 400:
