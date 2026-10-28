@@ -253,3 +253,15 @@ def bipe(tipo="inicio"):
         sd.play(np.concatenate(partes).astype(np.float32), sr)
     except Exception:
         pass
+
+
+def toque_lembrete():
+    """Toque de três notas antes do aviso falado (bloqueia ~0,6 s)."""
+    import sounddevice as sd
+    sr = 24000
+    partes = []
+    for f in (784, 988, 1319):
+        t = np.arange(int(sr * 0.16)) / sr
+        env = np.exp(-t * 9) * np.minimum(1, t * 400)
+        partes.append(0.22 * (np.sin(2 * np.pi * f * t) + 0.3 * np.sin(4 * np.pi * f * t)) * env)
+    sd.play(np.concatenate(partes).astype(np.float32), sr, blocking=True)

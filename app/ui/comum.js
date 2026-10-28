@@ -55,12 +55,12 @@ var EXEMPLO = {
       pendencias:[{id:1,texto:'Orcamento_Cliente.xlsx foi aberto 3 vezes desde ontem e continua sem salvar. (exemplo)',arquivo:'Orcamento_Cliente.xlsx'}],
       registro:[{hora:'08:12',app:'SolidWorks',nome:'Pergola_Lamelas_v3.SLDASM'},{hora:'07:58',app:'Excel',nome:'Orcamento_Cliente.xlsx'},{hora:'07:41',app:'Explorador',nome:'Projetos'}],
       ultima:{usuario:'Em qual arquivo eu estava ontem no fim da tarde?',assistente:'Das 16 e 20 às 17 e 40, na montagem Pergola_Lamelas_v3. Deseja que eu a abra?'},
-      alerta:null, aviso_gravacao:'', erros:[]
+      alerta:null, aviso_gravacao:'', erros:[], holo:{tipo:'peca',chave:'peca'}
     });
   },
   enviar: function(){ return Promise.resolve(true); }, ouvir: function(){ return Promise.resolve(true); },
   historico: function(){ return Promise.resolve([{quando:'2026-10-28 08:58:00',papel:'usuario',texto:'Exemplo de pergunta'},{quando:'2026-10-28 08:58:02',papel:'assistente',texto:'Exemplo de resposta.'}]); },
-  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+space',ignorar:['banco','senha']},vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
+  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,holo_real:true,x_esconde:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+space',ignorar:['banco','senha']},vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
   salvar_config: function(){ return Promise.resolve(true); }, testar_voz: function(){ return Promise.resolve(true); },
   gravar_voz: function(){ return Promise.resolve(true); }, usar_arquivo_voz: function(){ return Promise.resolve(false); },
   lembrete: function(){ return Promise.resolve(true); }, pendencia: function(){ return Promise.resolve(true); },
@@ -73,7 +73,7 @@ var EXEMPLO = {
     {id:3,nome:'SketchUp 2023',origem:'guia',trechos:7},{id:4,nome:'3ds Max 2025',origem:'guia',trechos:7},
     {id:5,nome:'Aspire 12',origem:'guia',trechos:6},{id:6,nome:'CypCut laser',origem:'guia',trechos:5},
     {id:7,nome:'Office Excel Word PowerPoint',origem:'guia',trechos:6}]}); },
-  conhecimento_adicionar: function(){ return Promise.resolve(false); }, conhecimento_remover: function(){ return Promise.resolve(true); }
+  conhecimento_adicionar: function(){ return Promise.resolve(false); }, testar_aviso: function(){ return Promise.resolve(true); }, encerrar: function(){ return Promise.resolve(true); }, conhecimento_remover: function(){ return Promise.resolve(true); }
 };
 
 var ROTULO_ESTADO = {carregando:'CARREGANDO', ocioso:'ESCUTANDO', gravando:'OUVINDO VOCÊ', transcrevendo:'ENTENDENDO',

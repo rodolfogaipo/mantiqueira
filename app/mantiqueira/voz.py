@@ -21,7 +21,7 @@ VOZ_PERSONALIZADA_PT = paths.DADOS / "voz_personalizada.pt"
 
 def dividir_frases(texto, limite=190):
     """Divide em frases curtas (o XTTS fica instável com trechos longos)."""
-    partes = [p.strip() for p in re.split(r"(?<=[.!?…;:])\s+", texto) if p.strip()]
+    partes = [p.strip() for p in re.split(r"(?<=[.!?…])\s+", texto) if p.strip()]
     out = []
     for p in partes:
         while len(p) > limite:
@@ -36,6 +36,7 @@ def dividir_frases(texto, limite=190):
     limpo = []
     for f in out:
         f = re.sub(r"[.;:…,]+$", "", f.strip()).strip()
+        f = re.sub(r"\s*[;:]\s*", ", ", f)       # dois-pontos e ponto e vírgula viram pausa curta
         if f:
             limpo.append(f)
     return limpo or [texto.strip(" .")]
@@ -107,7 +108,7 @@ class Voz:
             for i, nome in enumerate([v for v in VOZES_XTTS if v in existentes], start=1):
                 lista.append({"id": f"xtts:{nome}", "nome": f"Natural {i} — {nome}"})
             if VOZ_PERSONALIZADA_WAV.exists():
-                lista.append({"id": "xtts:personalizada", "nome": "Personalizada (gravação)"})
+                lista.insert(0, {"id": "xtts:personalizada", "nome": "Personalizada (seu áudio)"})
         if paths.PIPER_VOZ.exists():
             lista.append({"id": "piper:faber", "nome": "Rápida — Faber (mais robótica)"})
         return lista
@@ -209,8 +210,8 @@ class Voz:
             try:
                 with torch.inference_mode():
                     for f in frases:
-                        out = self.xtts.inference(f, "pt", lat, emb, temperature=0.6, repetition_penalty=5.0,
-                                                  top_p=0.85, speed=1.0, enable_text_splitting=False)
+                        out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
+                                                  top_k=50, top_p=0.85, speed=1.0, enable_text_splitting=False)
                         wav = np.asarray(out["wav"], dtype=np.float32)
                         fila.put(suavizar(wav))
             except Exception as e:
@@ -219,7 +220,7 @@ class Voz:
                 fila.put(None)
 
         threading.Thread(target=gerar, daemon=True, name="voz-gerar").start()
-        pausa = np.zeros(int(24000 * 0.18), dtype=np.float32)
+        pausa = np.zeros(int(24000 * 0.12), dtype=np.float32)
         tocou = False
         while True:
             a = fila.get()
@@ -244,3 +245,59 @@ class Voz:
         if audio.size:
             self.tipo_atual = "RÁPIDA"
             sd.play(audio, taxa, blocking=True, latency="high")
+
+
+def preparar_audio_voz(origem, destino, max_seg=30):
+    """Converte qualquer áudio (celular/WhatsApp) para WAV 24 kHz mono, tira silêncios e normaliza.
+    Devolve a duração final em segundos."""
+    import subprocess
+    import wave
+    bruto = paths.DADOS / "voz_bruta.wav"
+    ffmpeg = None
+    try:
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        log.warning("ffmpeg indisponível; só WAV/FLAC/OGG funcionam")
+    if ffmpeg:
+        r = subprocess.run([ffmpeg, "-y", "-i", str(origem), "-ac", "1", "-ar", "24000", "-sample_fmt", "s16",
+                            "-af", "highpass=f=70,lowpass=f=9000", str(bruto)],
+                           capture_output=True, creationflags=sistema.SEM_JANELA, timeout=120)
+        if r.returncode != 0:
+            raise RuntimeError("formato de áudio não reconhecido")
+        with wave.open(str(bruto), "rb") as w:
+            a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+    else:
+        import soundfile as sf
+        a, sr = sf.read(str(origem), dtype="float32", always_2d=True)
+        a = a.mean(axis=1)
+        if sr != 24000:
+            x = np.linspace(0, len(a) - 1, int(len(a) * 24000 / sr))
+            a = np.interp(x, np.arange(len(a)), a).astype(np.float32)
+    # tira trechos de silêncio (> 0,4 s), mantendo pausas naturais curtas
+    jan = 480
+    n = len(a) // jan
+    if n == 0:
+        raise RuntimeError("áudio vazio")
+    energia = np.sqrt((a[:n * jan].reshape(n, jan) ** 2).mean(axis=1))
+    limiar = max(0.008, float(np.percentile(energia, 95)) * 0.1)
+    ativo = energia > limiar
+    manter, silencio = [], 0
+    for i in range(n):
+        silencio = 0 if ativo[i] else silencio + 1
+        if ativo[i] or silencio <= 8:
+            manter.append(a[i * jan:(i + 1) * jan])
+    a = np.concatenate(manter) if manter else a
+    a = a[: int(max_seg * 24000)]
+    if len(a) < 24000 * 3:
+        raise RuntimeError("tem pouca fala no áudio (mínimo 3 segundos)")
+    pico = float(np.max(np.abs(a))) or 1.0
+    a = (a / pico * 0.9 * 32767).astype(np.int16)
+    with wave.open(str(destino), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000)
+        w.writeframes(a.tobytes())
+    try:
+        bruto.unlink()
+    except Exception:
+        pass
+    return len(a) / 24000

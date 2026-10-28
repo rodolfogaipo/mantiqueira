@@ -42,6 +42,8 @@ class Nucleo:
         self.erros = []
         self.ia = self.voz = self.ouvido = self.transcritor = self.olhos = self.cerebro = self.rotinas = None
         self.conhecimento = None
+        self.holo = None
+        self.saindo = False
         self.latencia = None
         self.alerta = None
         self.janelas = {"main": None, "mini": None}
@@ -84,6 +86,11 @@ class Nucleo:
             self.olhos = Olhos(self)
             self.olhos.iniciar()
         self._passo("Abrindo os olhos…", olhos)
+
+        def holo():
+            from .holo import Holo
+            self.holo = Holo(self)
+        self._passo("Preparando o holograma…", holo)
         self.rotinas = Rotinas(self)
 
         def voz():
@@ -213,11 +220,25 @@ class Nucleo:
         if self.voz:
             self.voz.falar(texto)
 
-    def alertar_lembrete(self, l):
+    def alertar_lembrete(self, l, repeticao=0):
+        """Avisa um lembrete: toque + voz primeiro; a janelinha abre em paralelo (uma coisa não trava a outra)."""
+        log.info("LEMBRETE disparado (id %s, repetição %s): %s", l["id"], repeticao, l["texto"])
         self.alerta = {"id": l["id"], "texto": l["texto"], "hora": parse_dt(l["quando"]).strftime("%H:%M")}
-        self.mostrar_mini_seguro(True, "alerta")
         trat = self.cfg["tratamento"]
-        self.falar_aviso(f"{trat[:1].upper() + trat[1:]}, lembrete: {l['texto']}.")
+        if repeticao:
+            frase = f"{trat[:1].upper() + trat[1:]}, lembrando de novo: {l['texto']}."
+        else:
+            frase = f"{trat[:1].upper() + trat[1:]}, está na hora: {l['texto']}."
+        try:
+            from .ouvido import toque_lembrete
+            toque_lembrete()
+        except Exception:
+            log.exception("toque do lembrete")
+        try:
+            self.falar_aviso(frase)
+        except Exception:
+            log.exception("voz do lembrete")
+        threading.Thread(target=self.mostrar_mini_seguro, args=(True, "alerta"), daemon=True).start()
 
     # ================================================================== janela flutuante
     def _principal_em_foco(self):
@@ -307,6 +328,18 @@ class Nucleo:
         self.cfg.atualizar({"voz": "xtts:personalizada"})
         self.aviso_gravacao = "Voz gravada. Ela já está escolhida — clique em Testar para ouvir."
 
+    def _holo_ui(self):
+        try:
+            if not self.holo:
+                return {"tipo": "logo", "chave": "logo"}
+            foco = self.olhos.foco if self.olhos else None
+            inativo = bool(self.olhos and self.olhos.inativo)
+            h = self.holo.estado(foco, inativo)
+            return {k: h.get(k) for k in ("tipo", "chave", "url")}
+        except Exception:
+            log.exception("holo")
+            return {"tipo": "logo", "chave": "logo"}
+
     # ================================================================== estado para a tela
     def estado_ui(self):
         cfg = self.cfg
@@ -361,6 +394,7 @@ class Nucleo:
             "latencia": round(self.latencia, 1) if self.latencia else None,
             "sub": sub, "agenda": agenda, "foco": foco, "pendencias": pend,
             "registro": self.olhos.registro_recente(4) if self.olhos else [],
+            "holo": self._holo_ui(),
             "ultima": self.ultima, "alerta": self.alerta, "aviso_gravacao": self.aviso_gravacao,
             "palavra": "MANTIQUEIRA", "atalho": cfg["atalho"].upper().replace("SPACE", "ESPAÇO"),
             "ativacao": bool(cfg["ativacao_por_voz"]),

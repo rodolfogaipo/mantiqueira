@@ -46,36 +46,17 @@
   }
   relogio(); setInterval(relogio, 1000);
 
-  /* holograma 3D: modelo de CAD (pérgola) ou um "documento" para os demais programas */
-  var hF = $('hF'), hS = $('hS'), hB = $('hB'), rot = $('rot');
-  var formaCad = true;
-  function desenhar(ang){
-    var ca = Math.cos(ang), sa = Math.sin(ang), ce = Math.cos(.42), se = Math.sin(.42), S = 62, cx = 170, cy = 158;
-    function P(x,y,z){ var xr = x*ca - y*sa, yr = x*sa + y*ca; return (cx + S*xr).toFixed(1) + ' ' + (cy - S*z*ce + S*yr*se*.9).toFixed(1); }
-    function L(a,b){ return 'M' + P(a[0],a[1],a[2]) + 'L' + P(b[0],b[1],b[2]); }
-    var f = '', s = '', bb = '', j;
-    if (formaCad){
-      var W = 1.25, D = 1.0, H = 1.3, C = [[-W,-D],[W,-D],[W,D],[-W,D]];
-      C.forEach(function(q){ f += L([q[0],q[1],0],[q[0],q[1],H]); });
-      for (j = 0; j < 4; j++){ var a = C[j], e = C[(j+1)%4]; f += L([a[0],a[1],H],[e[0],e[1],H]); bb += L([a[0],a[1],0],[e[0],e[1],0]); }
-      f += L([-W,-D,H-.12],[W,-D,H-.12]) + L([-W,D,H-.12],[W,D,H-.12]);
-      for (j = 1; j < 16; j++){ var y = -D + 2*D*j/16; s += L([-W,y,H+.04],[W,y,H+.04]); }
-    } else {
-      var w = .85, h = 1.1, z0 = .55;
-      var R = [[-w,0,z0-h/2+.6],[w,0,z0-h/2+.6],[w,0,z0+h/2+.6],[-w,0,z0+h/2+.6]];
-      for (j = 0; j < 4; j++){ f += L(R[j], R[(j+1)%4]); }
-      for (j = 1; j < 9; j++){ var zz = z0+h/2+.6 - j*h/9.5, ww = (j % 3 === 0) ? w*.4 : w*.75; s += L([-w*.8,0,zz],[-w*.8 + 2*ww,0,zz]); }
-      var CC = [[-1.1,-1.1],[1.1,-1.1],[1.1,1.1],[-1.1,1.1]];
-      for (j = 0; j < 4; j++){ var a2 = CC[j], e2 = CC[(j+1)%4]; bb += L([a2[0],a2[1],0],[e2[0],e2[1],0]); }
-    }
-    hF.setAttribute('d', f); hS.setAttribute('d', s); hB.setAttribute('d', bb);
-    rot.textContent = 'ROT ' + String(Math.round(((ang*180/Math.PI) % 360 + 360) % 360)).padStart(3,'0') + '°';
-  }
+  /* holograma 3D (three.js) */
+  var holo = null;
+  try { holo = Holograma.criar($('holoCanvas'), $('rot')); } catch (err) { console.log('holograma indisponível', err); }
+  var NOME_HOLO = {real:'SUA PEÇA · 3D', peca:'PEÇA', chapa:'CHAPA METÁLICA', montagem:'MONTAGEM', desenho:'DESENHO 2D',
+                   cad2d:'DESENHO CAD', movel:'MODELO 3D', cnc:'ROUTER CNC', laser:'CORTE A LASER', planilha:'PLANILHA',
+                   documento:'DOCUMENTO', globo:'INTERNET', pasta:'ARQUIVOS', mensagem:'MENSAGENS', familia:'EM CASA',
+                   logo:'MANTIQUEIRA'};
   var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var estadoAtual = 'carregando', t0 = null, nivel = 0;
   function quadro(t){
     if (t0 === null) t0 = t;
-    desenhar(.6 + (t - t0) / 2400);
     var alvo = estadoAtual === 'gravando' ? 1 : (estadoAtual === 'falando' ? .8 : (estadoAtual === 'pensando' || estadoAtual === 'transcrevendo' ? .35 : .08));
     nivel += (alvo - nivel) * .15;
     for (var j = 0; j < barras.length; j++){
@@ -84,7 +65,7 @@
     }
     requestAnimationFrame(quadro);
   }
-  desenhar(.6); if (!reduz) requestAnimationFrame(quadro);
+  if (!reduz) requestAnimationFrame(quadro);
 
   /* ---------------------------------------------------------------- estado */
   var ultimo = null;
@@ -145,10 +126,13 @@
     }).join('');
 
     /* foco */
+    if (holo && e.holo){
+      holo.setCor((TEMAS[e.tema] || TEMAS.Azul).p);
+      holo.mostrar(e.holo.chave, e.holo.tipo, e.holo.url);
+      $('holoTipo').textContent = NOME_HOLO[e.holo.tipo] || '';
+    }
     var f = e.foco;
     if (f){
-      formaCad = !!f.cad;
-      $('holoTipo').textContent = f.cad ? 'MODELO 3D' : 'DOCUMENTO';
       $('fApp').textContent = f.app;
       $('fArq').textContent = f.arquivo || '—';
       $('fInfo').textContent = 'HOJE: ' + f.tempo.toUpperCase() + (f.nao_salvo ? ' · ALTERAÇÕES NÃO SALVAS' : '');
@@ -202,11 +186,25 @@
     var t = $('cmd').value.trim();
     if (!t) return;
     $('cmd').value = '';
+    $('cmd').focus();
     $('uLine').textContent = 'VOCÊ › ' + t;
     $('aLine').textContent = '…';
     chamar('enviar', t);
   });
   $('bMic').addEventListener('click', function(){ chamar('ouvir'); });
+  /* caixa de texto: clicar em qualquer parte dela foca; começar a digitar em qualquer lugar também */
+  $('cmdf').addEventListener('mousedown', function(ev){
+    if (!ev.target.closest('button') && ev.target !== $('cmd')){ ev.preventDefault(); $('cmd').focus(); }
+  });
+  function algumPainelAberto(){ return !$('ovCfg').hidden || !$('ovHist').hidden || !$('ovCon').hidden; }
+  document.addEventListener('keydown', function(ev){
+    var alvo = document.activeElement, tag = alvo && alvo.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || algumPainelAberto()) return;
+    if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
+    if (ev.key.length === 1 || ev.key === 'Backspace') $('cmd').focus();
+  });
+  window.addEventListener('focus', function(){ if (!algumPainelAberto()) $('cmd').focus(); });
+  setTimeout(function(){ $('cmd').focus(); }, 300);
   $('agenda').addEventListener('click', function(ev){
     var b = ev.target.closest('[data-lid]');
     if (!b) return;
@@ -293,6 +291,7 @@
       $('cModo').value = g.modo_ia || 'normal';
       $('cModo').disabled = !c.turbo;
       $('cAtiv').checked = !!g.ativacao_por_voz; $('cFalar').checked = !!g.responder_falando;
+      $('cHolo').checked = g.holo_real !== false; $('cX').checked = g.x_esconde !== false;
       $('cOlhos').checked = !!g.olhos_ativos; $('cIni').checked = !!g.iniciar_com_windows;
       $('cAtalho').value = g.atalho || 'ctrl+space';
       $('cIgn').value = (g.ignorar || []).join('\n');
@@ -303,12 +302,19 @@
   $('cGravar').addEventListener('click', function(){ $('cAviso').textContent = 'Preparando…'; chamar('gravar_voz'); });
   $('cArqVoz').addEventListener('click', function(){ chamar('usar_arquivo_voz'); });
   $('cDados').addEventListener('click', function(){ chamar('abrir_dados'); });
+  $('cTesteAviso').addEventListener('click', function(){ chamar('testar_aviso').then(function(){ $('cOk').textContent = 'AVISO EM 20 SEGUNDOS — PODE MINIMIZAR'; }); });
+  $('cSair').addEventListener('click', function(){
+    var b = $('cSair');
+    if (b.getAttribute('data-ok') !== '1'){ b.setAttribute('data-ok', '1'); b.textContent = 'CLIQUE DE NOVO PARA ENCERRAR'; return; }
+    chamar('encerrar');
+  });
   $('cSalvar').addEventListener('click', function(){
     chamar('salvar_config', {
       nome: $('cNome').value.trim() || 'Rodolfo', tratamento: $('cTrat').value.trim() || 'senhor',
       voz: $('cVoz').value, microfone: $('cMic').value, modo_ia: $('cModo').value,
       ativacao_por_voz: $('cAtiv').checked, responder_falando: $('cFalar').checked,
       olhos_ativos: $('cOlhos').checked, iniciar_com_windows: $('cIni').checked,
+      holo_real: $('cHolo').checked, x_esconde: $('cX').checked,
       atalho: $('cAtalho').value.trim() || 'ctrl+space', ignorar: $('cIgn').value, tema: temaEscolhido
     }).then(function(){ $('cOk').textContent = 'SALVO'; });
   });

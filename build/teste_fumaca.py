@@ -161,6 +161,43 @@ def _():
           r[0]["texto"].replace("\n", " ")[:200], flush=True)
 
 
+@etapa("holograma (STL, categorias) e áudio do celular")
+def _():
+    import struct
+    import subprocess
+    import numpy as np
+    from mantiqueira import paths
+    from mantiqueira.holo import ler_stl, categoria
+    import comtypes.client  # noqa
+    import imageio_ffmpeg
+    # STL binário com 2 triângulos e o mesmo em texto
+    tri = np.array([[0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 0, 0, 1, 0, 0, 0, 1]], dtype=np.float32)
+    b = paths.DADOS / "t.stl"
+    with open(b, "wb") as f:
+        f.write(b"\0" * 80 + struct.pack("<I", 2))
+        for t in tri:
+            f.write(struct.pack("<3f", 0, 0, 1) + t.tobytes() + b"\0\0")
+    assert np.allclose(ler_stl(b), tri)
+    a = paths.DADOS / "t_txt.stl"
+    a.write_text("solid x\n" + "".join("facet normal 0 0 1\nouter loop\n" + "".join(
+        f"vertex {t[i]} {t[i+1]} {t[i+2]}\n" for i in (0, 3, 6)) + "endloop\nendfacet\n" for t in tri) + "endsolid x\n")
+    assert np.allclose(ler_stl(a), tri)
+    cats = {categoria({"app": "SolidWorks", "arquivo": "Pergola.SLDASM"}): "montagem",
+            categoria({"app": "Excel", "arquivo": "x.xlsx"}): "planilha",
+            categoria({"app": "Aspire", "arquivo": ""}): "cnc", categoria(None): "familia"}
+    for obtido, esperado in cats.items():
+        assert obtido == esperado, (obtido, esperado)
+    # áudio "do celular" (m4a gerado aqui) → voz
+    m4a = paths.DADOS / "celular.m4a"
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-f", "lavfi", "-i",
+                    "sine=frequency=180:duration=6", "-f", "lavfi", "-i", "anoisesrc=d=6:a=0.02",
+                    "-filter_complex", "amix=inputs=2", "-c:a", "aac", str(m4a)], check=True, capture_output=True)
+    from mantiqueira.voz import preparar_audio_voz
+    seg = preparar_audio_voz(m4a, paths.DADOS / "voz_teste.wav")
+    assert seg >= 3, seg
+    print(f"::notice title=Holograma e voz::STL ok, categorias ok, áudio m4a convertido ({seg:.1f}s)", flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

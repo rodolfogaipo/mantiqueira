@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 dados/
 build/mantiqueira.ico
+app/ui/_holo/

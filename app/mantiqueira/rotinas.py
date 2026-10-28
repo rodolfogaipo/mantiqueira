@@ -11,15 +11,20 @@ log = logging.getLogger("rotinas")
 DOCS = (".sldprt", ".sldasm", ".slddrw", ".xlsx", ".xlsm", ".xls", ".docx", ".doc", ".pptx", ".dxf", ".dwg")
 
 
+REPETIR_MIN = (5, 10)     # se não confirmar, avisa de novo depois de 5 e de 10 minutos
+
+
 class Rotinas:
     def __init__(self, nucleo):
         self.n = nucleo
         self.db = nucleo.db
+        self.repetir = {}     # id → [quando_repetir (timestamp), vezes]
 
     # ------------------------------------------------------------------ lembretes
     def loop_lembretes(self):
+        log.info("vigia de lembretes ligado")
         while True:
-            time.sleep(5)
+            time.sleep(3)
             try:
                 for l in self.db.lembretes_vencidos():
                     self.db.lembrete_status(l["id"], "avisado")
@@ -29,7 +34,18 @@ class Rotinas:
                             prox = textutil.proxima_repeticao(prox, l["repetir"])
                         if prox:
                             self.db.lembrete_novo(prox, l["texto"], l["origem"], l["repetir"])
+                    self.repetir[l["id"]] = [time.time() + REPETIR_MIN[0] * 60, 0]
                     self.n.alertar_lembrete(l)
+                for lid, (quando, vezes) in list(self.repetir.items()):
+                    if time.time() < quando:
+                        continue
+                    l = self.db.lembrete(lid)
+                    if not l or l["status"] != "avisado" or vezes >= len(REPETIR_MIN):
+                        self.repetir.pop(lid, None)
+                        continue
+                    vezes += 1
+                    self.repetir[lid] = [time.time() + (REPETIR_MIN[vezes] if vezes < len(REPETIR_MIN) else 0) * 60, vezes]
+                    self.n.alertar_lembrete(l, repeticao=vezes)
             except Exception:
                 log.exception("erro nos lembretes")
 

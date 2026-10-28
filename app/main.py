@@ -28,7 +28,14 @@ def main():
     log.info("==== Mantiqueira %s iniciando ====", VERSAO)
     ctypes.windll.kernel32.CreateMutexW(None, False, "Mantiqueira_Instancia_Unica")
     if ctypes.windll.kernel32.GetLastError() == 183:
-        aviso("O Mantiqueira já está aberto.", erro=False)
+        # já está aberto (talvez minimizado): traz a janela para a frente
+        u = ctypes.windll.user32
+        hwnd = u.FindWindowW(None, "Mantiqueira")
+        if hwnd:
+            u.ShowWindow(hwnd, 9)          # SW_RESTORE
+            u.SetForegroundWindow(hwnd)
+        else:
+            aviso("O Mantiqueira já está aberto.", erro=False)
         return
 
     import webview
@@ -64,6 +71,23 @@ def main():
         finally:
             os._exit(0)
 
+    avisou = {"x": False}
+
+    def ao_pedir_fechar():
+        """O X só minimiza: o Mantiqueira continua avisando e ouvindo. Para sair: Configurações > ENCERRAR."""
+        if nucleo.cfg["x_esconde"] and not nucleo.saindo:
+            try:
+                principal.minimize()
+            except Exception:
+                log.exception("minimizar")
+            if not avisou["x"]:
+                avisou["x"] = True
+                nucleo.falar_aviso("Continuo aqui minimizado, cuidando dos lembretes. "
+                                   "Para me encerrar de vez, use o botão Encerrar nas configurações.")
+            return False
+        return True
+
+    principal.events.closing += ao_pedir_fechar
     principal.events.closed += ao_fechar
     webview.start(nucleo.iniciar, http_server=True, private_mode=False,
                   debug=bool(os.environ.get("MANTIQUEIRA_DEBUG")))

@@ -89,14 +89,8 @@
 <section class="abs dir" style="left:1060px;top:130px;width:340px">
   <div class="ph" style="letter-spacing:2px"><span class="brilho">// HOLOGRAMA · EM FOCO</span><span class="ln"></span><span id="rec" class="pisca al">● REC</span></div>
   <div class="holo">
-    <svg class="hsvg" width="340" height="200" viewBox="0 0 340 200" role="img" aria-label="Holograma do que está em uso">
-      <ellipse cx="170" cy="168" rx="120" ry="18" fill="none" style="stroke:var(--p2)" stroke-width="1" opacity=".6"/>
-      <ellipse cx="170" cy="168" rx="90" ry="13" fill="none" style="stroke:var(--p3)" stroke-width="1" stroke-dasharray="3 4"/>
-      <path id="hB" fill="none" style="stroke:var(--p2)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>
-      <path id="hS" fill="none" style="stroke:var(--p)" stroke-width="1" opacity=".85"/>
-      <path id="hF" fill="none" style="stroke:var(--hi)" stroke-width="1.6"/>
-      <g font-family="Share Tech Mono, Consolas, monospace" font-size="9" letter-spacing="1" style="fill:var(--mu)"><text x="6" y="14" id="holoTipo">MODELO 3D</text><text x="282" y="14" id="rot">ROT 000°</text></g>
-    </svg>
+    <canvas id="holoCanvas" width="680" height="400" aria-label="Holograma do que está em uso"></canvas>
+    <div class="holoInfo mono"><span id="holoTipo">MODELO 3D</span><span id="rot">ROT 000°</span></div>
     <div class="linhaScan"></div>
   </div>
   <div class="mono rot2">APLICATIVO</div>
@@ -126,10 +120,10 @@
     <div id="uLine" class="mono uline"> </div>
     <div id="aLine" class="brilho aline"> </div>
   </div>
-  <form id="cmdf" class="cmd" autocomplete="off">
+  <form id="cmdf" class="cmd" autocomplete="off" title="Clique e digite">
     <span class="mono brilho seta">›</span>
     <label for="cmd" class="sr">Mensagem para o Mantiqueira</label>
-    <input id="cmd" type="text" placeholder="digite ou diga MANTIQUEIRA">
+    <input id="cmd" type="text" placeholder="digite aqui ou diga MANTIQUEIRA" autofocus>
     <button type="button" class="ib" id="bMic" aria-label="Falar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     <button type="submit" class="ib ibP" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></button>
   </form>
@@ -179,8 +173,8 @@
           <div class="linha"><select id="cVoz"></select><button type="button" class="chip" id="cTestar">TESTAR</button></div>
         </div>
         <div class="campo"><span>Voz personalizada</span>
-          <div class="linha"><button type="button" class="chip" id="cGravar">GRAVAR 20 S</button><button type="button" class="chip" id="cArqVoz">USAR ARQUIVO .WAV</button></div>
-          <small id="cAviso" class="mu">Grave alguém que autorize o uso da própria voz. Fale de forma natural, sem barulho ao fundo.</small>
+          <div class="linha"><button type="button" class="chip" id="cArqVoz">USAR ÁUDIO DO CELULAR</button><button type="button" class="chip" id="cGravar">GRAVAR 20 S NO MICROFONE</button></div>
+          <small id="cAviso" class="mu">Para a voz ficar mais humana e com sotaque brasileiro: grave no celular 20 a 30 segundos de alguém (que autorize) lendo um texto com calma, num lugar silencioso. Pode ser áudio do WhatsApp ou do gravador. Passe o arquivo para o PC e clique em USAR ÁUDIO DO CELULAR.</small>
         </div>
         <label class="campo"><span>Microfone</span><select id="cMic"></select></label>
         <label class="campo"><span>Modo da IA</span>
@@ -192,16 +186,21 @@
         <label class="check"><input id="cFalar" type="checkbox"><span>Responder falando (também quando eu digitar)</span></label>
         <label class="check"><input id="cOlhos" type="checkbox"><span>Registrar os programas e arquivos que eu uso</span></label>
         <label class="check"><input id="cIni" type="checkbox"><span>Abrir junto com o Windows</span></label>
+        <label class="check"><input id="cHolo" type="checkbox"><span>Holograma 3D da peça aberta no SolidWorks</span></label>
+        <label class="check"><input id="cX" type="checkbox"><span>O X só minimiza (continua avisando)</span></label>
         <label class="campo"><span>Atalho para falar</span><input id="cAtalho" type="text" placeholder="ctrl+space"></label>
         <div class="campo"><span>Cor</span><div id="cTemas" class="temas"></div></div>
         <label class="campo"><span>Nunca registrar janelas com estas palavras (uma por linha)</span><textarea id="cIgn" rows="5"></textarea></label>
-        <div class="linha"><button type="button" class="btn btnA" id="cSalvar">SALVAR</button><button type="button" class="btn" id="cDados">ABRIR PASTA DE DADOS</button><span id="cOk" class="mono mu"></span></div>
+        <div class="linha"><button type="button" class="btn btnA" id="cSalvar">SALVAR</button><button type="button" class="btn" id="cTesteAviso">TESTAR AVISO</button><span id="cOk" class="mono mu"></span></div>
+        <div class="linha"><button type="button" class="btn" id="cDados">ABRIR PASTA DE DADOS</button><button type="button" class="btn" id="cSair">ENCERRAR MANTIQUEIRA</button></div>
       </div>
     </div>
   </div>
 </div>
 
 </div>
+<script src="vendor/three.min.js"></script>
+<script src="holograma.js"></script>
 <script src="comum.js"></script>
 <script src="principal.js"></script>
 </body>

@@ -60,6 +60,12 @@ class Cerebro:
                 for l in lem))
         else:
             partes.append("LEMBRETES PENDENTES: nenhum.")
+        avisados = db.q("SELECT * FROM lembretes WHERE status IN ('avisado','visto','concluido') AND quando>=? ORDER BY quando",
+                         (agora().strftime("%Y-%m-%d 00:00:00"),))
+        if avisados:
+            partes.append("LEMBRETES DE HOJE JÁ AVISADOS (o horário já passou e você falou em voz alta):\n" + "\n".join(
+                f"- {parse_dt(l['quando']):%H:%M} {l['texto']} ({'confirmado' if l['status'] == 'concluido' else 'avisado'})"
+                for l in avisados[-8:]))
         pend = db.pendencias_abertas()[:5]
         if pend:
             partes.append("PENDÊNCIAS PERCEBIDAS:\n" + "\n".join(f"- {p['texto']}" for p in pend))

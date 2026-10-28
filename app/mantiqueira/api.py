@@ -45,7 +45,14 @@ class Api:
             self._n.mostrar_mini_seguro(False)
         return True
 
+    def testar_aviso(self):
+        import datetime as dt
+        self._n.db.lembrete_novo(agora() + dt.timedelta(seconds=20), "Teste de aviso do Mantiqueira", "teste")
+        return True
+
     def fechar_alerta(self):
+        if self._n.alerta:
+            self._n.db.lembrete_status(int(self._n.alerta["id"]), "visto")
         self._n.alerta = None
         self._n.mostrar_mini_seguro(False)
         return True
@@ -81,6 +88,12 @@ class Api:
                 pass
             w.show()
         self._n.mostrar_mini_seguro(False)
+        return True
+
+    def encerrar(self):
+        self._n.saindo = True
+        w = self._n.janelas.get("main")
+        threading.Thread(target=lambda: w and w.destroy(), daemon=True).start()
         return True
 
     def abrir_dados(self):
@@ -162,16 +175,28 @@ class Api:
         return True
 
     def usar_arquivo_voz(self):
+        """Usa um áudio (do celular, WhatsApp, gravador…) como base da voz natural."""
         import webview
-        from .voz import VOZ_PERSONALIZADA_WAV
+        from .voz import VOZ_PERSONALIZADA_WAV, preparar_audio_voz
         w = self._n.janelas.get("main")
         tipo = getattr(getattr(webview, "FileDialog", None), "OPEN", None) or webview.OPEN_DIALOG
-        r = w.create_file_dialog(tipo, file_types=("Áudio WAV (*.wav)",)) if w else None
+        r = w.create_file_dialog(tipo, file_types=(
+            "Áudio (*.wav;*.mp3;*.ogg;*.opus;*.m4a;*.aac;*.wma;*.flac;*.mp4)", "Todos os arquivos (*.*)")) if w else None
         if not r:
             return False
-        shutil.copyfile(r[0], VOZ_PERSONALIZADA_WAV)
-        if self._n.voz:
-            self._n.voz.voz_personalizada_atualizada()
-        self._n.cfg.atualizar({"voz": "xtts:personalizada"})
-        self._n.aviso_gravacao = "Voz carregada do arquivo. Clique em Testar para ouvir."
+
+        def tarefa():
+            self._n.aviso_gravacao = "Preparando o áudio…"
+            try:
+                seg = preparar_audio_voz(r[0], VOZ_PERSONALIZADA_WAV)
+            except Exception as e:
+                log.exception("áudio da voz")
+                self._n.aviso_gravacao = f"Não consegui usar esse áudio: {e}"
+                return
+            if self._n.voz:
+                self._n.voz.voz_personalizada_atualizada()
+            self._n.cfg.atualizar({"voz": "xtts:personalizada"})
+            aviso = " (curto: o ideal é 20 a 30 segundos)" if seg < 12 else ""
+            self._n.aviso_gravacao = f"Voz pronta a partir de {seg:.0f} s de áudio{aviso}. Clique em TESTAR."
+        threading.Thread(target=tarefa, daemon=True).start()
         return True

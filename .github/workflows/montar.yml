@@ -113,9 +113,9 @@ jobs:
       - name: Empacotar em partes
         shell: pwsh
         run: |
-          python build\empacotar.py $env:DIST $env:OUT
+          python build\atualizacao.py $env:OUT $env:DIST
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          python build\atualizacao.py $env:OUT
+          python build\empacotar.py $env:DIST $env:OUT
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Copy-Item C:\m\inst\Instalar-Mantiqueira.exe $env:OUT
           Copy-Item LEIA-ME.txt $env:OUT

@@ -19,6 +19,8 @@ PADRAO = {
     "olhos_ativos": True,
     "modo_ia": "normal",            # normal | turbo | auto
     "iniciar_com_windows": False,
+    "holo_real": True,              # holograma 3D da peça aberta no SolidWorks
+    "x_esconde": True,              # o X da janela esconde em vez de fechar
     "ignorar": [
         "banco", "bank", "senha", "password", "keepass", "bitwarden", "1password",
         "inprivate", "anônima", "anonima", "incognito", "nubank", "itaú", "itau",

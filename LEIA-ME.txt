@@ -36,6 +36,22 @@ COMO ATUALIZAR (quando já está instalado)
   mais nova, coloque os dois numa pasta nova e rode o instalador.
   Ele troca só o programa; lembretes, histórico e configurações ficam.
 
+JANELA
+- O X só minimiza: ele continua avisando os lembretes e ouvindo.
+  Para fechar de vez: CONFIGURAÇÕES > ENCERRAR MANTIQUEIRA.
+- CONFIGURAÇÕES > TESTAR AVISO cria um lembrete em 20 segundos para conferir.
+
+VOZ MAIS HUMANA
+- Grave no celular 20 a 30 s de alguém (que autorize) lendo um texto com
+  calma, sem barulho. Passe o arquivo para o PC (áudio do WhatsApp, m4a,
+  mp3...) e use CONFIGURAÇÕES > USAR ÁUDIO DO CELULAR.
+
+HOLOGRAMA
+- No SolidWorks ele mostra a SUA peça/montagem girando em 3D (atualiza ao
+  abrir e ao salvar). Peças muito pesadas, desenhos e outros programas
+  mostram uma ilustração. Parado, mostra pai e filho brincando.
+- Dá para desligar o 3D da peça em CONFIGURAÇÕES.
+
 PRIMEIRA ABERTURA
 - Leva cerca de 1 minuto para carregar a IA e a voz.
 - Abra CONFIGURAÇÕES para escolher a voz (botão TESTAR), o microfone e a cor.
