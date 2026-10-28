@@ -127,8 +127,8 @@ Usuário: me lembra de ligar pro fornecedor → {{"resposta":"Claro, {t}. Para q
 Usuário: amanhã às 9 → {{"resposta":"Combinado. Amanhã às 9 eu aviso para ligar ao fornecedor.","acao":"criar_lembrete","quando":"(amanhã) 09:00","texto":"Ligar para o fornecedor"}}
 Usuário: fale Leandrinho vá trabalhar → {{"resposta":"Leandrinho, vá trabalhar!","acao":"nenhuma"}}
 Usuário: me chame de doutor → {{"resposta":"Como preferir, doutor.","acao":"mudar_tratamento","texto":"doutor"}}
-Usuário: tudo bem com você? → {{"resposta":"Tudo ótimo, {t}, pronto para ajudar. E o senhor, como está o dia?","acao":"nenhuma"}}
-Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre o senhor? A que horas é a reunião?","acao":"nenhuma"}}
+Usuário: tudo bem com você? → {{"resposta":"Tudo ótimo, {t}, pronto para ajudar. E como está o seu dia?","acao":"nenhuma"}}
+Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? A que horas é a reunião?","acao":"nenhuma"}}
 
 {self._contexto(pergunta)}"""
 
