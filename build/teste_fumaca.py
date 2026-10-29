@@ -398,6 +398,44 @@ def _():
     print(f"::notice title=Saudação::gravada ok, tocou={tocou}, tela travada={travada}", flush=True)
 
 
+@etapa("'achou?' e 'abre ele' (conversa de busca)")
+def _():
+    import shutil
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.indice import Indice
+    from mantiqueira.memoria import Memoria
+    from mantiqueira.frases import Frases
+    from mantiqueira.intencoes import Intencoes
+    import mantiqueira.intencoes as I
+    abertos = []
+    I.os.startfile = lambda c: abertos.append(c)
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_143.db"); n.olhos = None; n.sistemas = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.parar_fala = lambda: None; n.cerebro = None; n.ultima_fala = ""
+    n.indice = Indice(n); n.memoria = Memoria(n); n.frases = Frases(n.db)
+    base = paths.DADOS / "teste_143"
+    shutil.rmtree(base, ignore_errors=True)
+    d = base / "Projetos Rodolfo" / "MESA LUNA OVAL 2,80X1,20" / "IMPRESSOS"
+    d.mkdir(parents=True)
+    for a in ("MESA LUNA OVAL 2,80X1,20.pdf", "MESA LUNA OVAL 2,80X1,20.SLDDRW"):
+        (d / a).write_bytes(b"x")
+    n.indice.varrer(str(base), "pc")
+    n.indice.con.execute("UPDATE arq SET raiz=? WHERE raiz=?", ("C:\\", str(base)))
+    n.indice.con.commit()
+    n.indice.locais = lambda: [("C:\\", "pc", "")]
+    it = Intencoes(n)
+    r1 = it.tratar("O PDF ESTA NO COMPUTADOR MESA LUNA OVAL 2,80X1,20", [])
+    r2 = it.tratar("ACHOU?", [])
+    r3 = it.tratar("ENTÃO ABRA ELE", [])
+    assert "Achei" in r1 and "Sim" in r2 and abertos and abertos[-1].endswith("2,80X1,20.pdf"), (r1, r2, r3, abertos)
+    print(f"::notice title=Conversa de busca::{r1} %0A{r2} %0A{r3}", flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

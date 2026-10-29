@@ -41,8 +41,20 @@ JS_LER = r"""
     if (linhas.length) tabelas.push({cab: cab, linhas: linhas});
   }
   var prox = null;
-  var cands = document.querySelectorAll('button, a, li, [role=button]');
+  function livre(b){
+    return !(b.disabled || b.getAttribute('aria-disabled') === 'true' || /disabled/.test(b.className) ||
+             (b.parentElement && /disabled/.test(b.parentElement.className))) && b.offsetParent !== null;
+  }
+  // 1º: o botão "próxima página" de paginadores conhecidos (Angular Material, Bootstrap, DataTables…)
+  var esp = document.querySelectorAll('.mat-paginator-navigation-next, .mat-mdc-paginator-navigation-next, ' +
+    '[aria-label*="róxima" i], [aria-label*="next page" i], [aria-label="Next" i], .paginate_button.next, .page-item.next a, li.next a');
+  for (var j = 0; j < esp.length; j++){
+    if (livre(esp[j])){ esp[j].setAttribute('data-mantiqueira-prox', '1'); prox = true; break; }
+    else { prox = false; break; }                      // achou o paginador e o botão está desligado: última página
+  }
+  var cands = prox === null ? document.querySelectorAll('button, a, li, [role=button]') : [];
   for (var i = 0; i < cands.length; i++){
+    if (cands[i].closest('nav, aside, header, mat-sidenav, .sidebar, .sidenav, .menu, mat-nav-list')) continue;
     var b = cands[i], r = ((b.getAttribute('aria-label') || '') + ' ' + (b.title || '') + ' ' + txt(b) + ' ' + b.className).toLowerCase();
     if (/(pr[oó]xim|next|seguinte|›|»|chevron_right|navigate_next)/.test(r) && !/(últim|ultim|last)/.test(r)){
       var desab = b.disabled || b.getAttribute('aria-disabled') === 'true' || /disabled/.test(b.className) ||
@@ -50,7 +62,8 @@ JS_LER = r"""
       if (!desab && b.offsetParent !== null){ b.setAttribute('data-mantiqueira-prox', '1'); prox = true; break; }
     }
   }
-  var login = !!document.querySelector('input[type=password]');
+  var login = false;
+  document.querySelectorAll('input[type=password]').forEach(function(x){ if (x.offsetParent !== null) login = true; });
   return JSON.stringify({tabelas: tabelas, proxima: !!prox, login: login, titulo: document.title, url: location.href});
 })()
 """
@@ -167,7 +180,7 @@ class SistemasWeb:
                 pass
 
     # ------------------------------------------------------------------ leitura
-    def ler(self, sistema, max_paginas=25, cache_seg=180):
+    def ler(self, sistema, max_paginas=60, cache_seg=180):
         nome = sistema["nome"]
         c = self.cache.get(nome)
         if c and time.time() - c[0] < cache_seg:
@@ -176,11 +189,15 @@ class SistemasWeb:
             w = self._janela(sistema["url"], False)
             time.sleep(3)
             dados = self._eval(w, JS_LER)
-            for _ in range(10):                    # páginas que carregam a tabela depois
-                if dados and (dados["tabelas"] or dados["login"]):
+            # sistemas modernos mostram a tela de login por um instante enquanto conferem a sessão:
+            # só conclui "precisa de login" se continuar assim por uns 15 segundos
+            for _ in range(15):
+                if dados and dados["tabelas"]:
                     break
                 time.sleep(1)
                 dados = self._eval(w, JS_LER)
+            log.info("sistema %s: endereço %s, tabelas=%s, login=%s", nome, (dados or {}).get("url"),
+                     len((dados or {}).get("tabelas") or []), (dados or {}).get("login"))
             if not dados:
                 try:
                     url_atual = w.get_current_url()
@@ -188,7 +205,7 @@ class SistemasWeb:
                     url_atual = None
                 log.info("sistema %s sem resposta; endereço atual: %s", nome, url_atual)
                 raise RuntimeError("a página não respondeu")
-            if dados["login"]:
+            if dados["login"] and not dados["tabelas"]:
                 self.precisa_login.add(nome)
                 return {"login": True}
             self.precisa_login.discard(nome)

@@ -224,8 +224,18 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
             acao = "nenhuma"
         if acao not in ("nenhuma", "criar_lembrete") and acao not in permitido:
             acao = "nenhuma"
-        if acao == "nenhuma" and re.search(r"\b(vou (verificar|procurar|abrir|checar|olhar|buscar)|um momento|aguarde)\b",
-                                            textutil.sem_acento(resposta.lower())):
+        r_sa = textutil.sem_acento(resposta.lower())
+        if re.search(r"\b(procur\w*|localiz\w*|encontr\w*|achei|achado|abrindo|abri|buscando)\b", r_sa) and \
+                re.search(r"\b(arquivo|pdf|pasta|diretorio|planilha|montagem|desenho|dxf|dwg|computador|rede)\b|[a-z]:\\", r_sa) and \
+                getattr(n, "intencoes", None):
+            # a IA "fingiu" procurar um arquivo: faz a busca de verdade e responde com o resultado
+            real = n.intencoes.buscar_forcado(pergunta)
+            log.info("IA tentou procurar sozinha; busca real: %r", real)
+            if real:
+                self._guardar(pergunta, real)
+                return real
+            resposta = f"Não procurei esse arquivo ainda, {trat}. Diga: procura no computador e o nome do arquivo."
+        elif acao == "nenhuma" and re.search(r"\b(vou (verificar|procurar|abrir|checar|olhar|buscar)|um momento|aguarde)\b", r_sa):
             resposta = f"Não tenho essa informação aqui, {trat}."
 
         if acao == "criar_lembrete" and not textutil.pede_lembrete(pergunta) and not self._ultimo_perguntou_quando():

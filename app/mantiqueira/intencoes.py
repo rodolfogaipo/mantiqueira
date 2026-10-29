@@ -15,6 +15,13 @@ log = logging.getLogger("intencoes")
 
 RX_BUSCA = re.compile(r"\b(procur\w*|pesquis(a|e|ar)\b|localiz\w*|encontr(a|e|ar)\b|ach(a|e|ar) (pra mim|o|a|os|as|um|uma|meu|minha)\b|"
                       r"onde (esta|estao|fica|ficam|ta|tao|guardei|salvei)|cade)\b")
+# "o pdf está no computador X", "a planilha fica na rede", "tá no file projetos"
+RX_BUSCA_LUGAR = re.compile(r"\b(esta|ta|fica|ficou|salvei|guardei|tem|tenho|existe)\s+(um |uma |o |a )?(arquivo |pdf |planilha )?"
+                            r"(no|na|em|dentro do|dentro da)\s+(computador|pc|rede|pendrive|pen drive|file|servidor|pasta|disco|"
+                            r"area de trabalho|desktop|documentos|downloads|[a-z]\b)")
+RX_TIPO_SOLTO = re.compile(r"\b(pdfs?|planilhas?|montagem|montagens|dxf|dwg|arquivo|desenho|pasta)\b")
+# pronomes: "abre ele", "abre esse", "abre o arquivo"
+RX_PRONOME = re.compile(r"\b(ele|ela|esse|essa|este|esta|isso|aquilo|o arquivo|a pasta dele|la|entao|agora|ai|logo|mesmo)\b")
 RX_LIXO = re.compile(r"\b(mantiqueira|procur\w*|pesquis\w*|localiz\w*|encontr\w*|ach[ae]r?|pra mim|para mim|por favor|onde|esta|estao|"
                      r"fica|ficam|ta|tao|guardei|salvei|cade|no computador|no pc|na rede|no pendrive|em tudo|arquivo|arquivos|"
                      r"pasta|o|a|os|as|um|uma|de|do|da|dos|das|me|meu|minha|que|eu|e|ai|aqui)\b")
@@ -82,7 +89,7 @@ class Intencoes:
     # ------------------------------------------------------------------ roteador
     def tratar(self, pergunta, historico):
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
-        for f in (self.parar, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
+        for f in (self.parar, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
                   self.abrir_pedido, self.buscar, self.ler_janela):
             try:
@@ -109,6 +116,21 @@ class Intencoes:
         if c:
             c.lembrete_pendente = None
         return f"Ok, {self._trat()}."
+
+    # ------------------------------------------------------------------ "achou?"
+    def achou(self, p, original):
+        if not re.fullmatch(r"(e (ai|entao) )?(achou|encontrou|conseguiu|e ai|deu certo|e entao|cade|ja achou|achou ai|"
+                            r"achou o arquivo|encontrou o arquivo|achou ele|achou ou nao)( ele| o arquivo| ai)?( mantiqueira)?", p):
+            return None
+        b = getattr(self, "ultima_busca", None)
+        if not b or time.time() - self.quando_busca > 900:
+            return (f"Ainda não procurei nada, {self._trat()}. Diga, por exemplo: procura no computador o PDF da mesa luna "
+                    f"oval, e eu já respondo se achei.")
+        if self.resultados:
+            nomes = "; ".join(f"{i + 1}, {descrever(r)}" for i, r in enumerate(self.resultados[:4]))
+            self.n.detalhe_texto = "\n".join(f"{i + 1}. {r['caminho']}" for i, r in enumerate(self.resultados[:8]))
+            return f"Sim. Encontrei: {nomes}. Quer que eu abra? Diga o número."
+        return f"Não achei \"{b['consulta']}\"{b['lugar']}, {self._trat()}."
 
     # ------------------------------------------------------------------ repete
     def repetir(self, p, original):
@@ -377,8 +399,14 @@ class Intencoes:
         return None, p
 
     # ------------------------------------------------------------------ busca de arquivos
-    def buscar(self, p, original):
-        if not RX_BUSCA.search(p) or textutil.pede_lembrete(p):
+    def buscar_forcado(self, pergunta):
+        """Usado quando a IA tentou 'procurar' sozinha: faz a busca de verdade com a frase do usuário."""
+        p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
+        return self.buscar(p, pergunta, forcar=True)
+
+    def buscar(self, p, original, forcar=False):
+        lugar_frase = RX_BUSCA_LUGAR.search(p) and RX_TIPO_SOLTO.search(p) and not RX_ABRIR.search(p)
+        if (not RX_BUSCA.search(p) and not lugar_frase and not forcar) or textutil.pede_lembrete(p):
             return None
         ix = self.n.indice
         if not ix:
@@ -390,6 +418,8 @@ class Intencoes:
             return f"O que o {self._trat()} quer que eu procure?"
         exatos, parecidos = ix.buscar(consulta, onde, limite=6, exts=exts)
         self.consulta, self.quando_busca = consulta, time.time()
+        self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
+                             "achou": len(exatos), "parecidos": len(parecidos)}
         aviso = ""
         if ix.varrendo:
             aviso = f" Ainda estou terminando de mapear {ix.varrendo}, então pode haver mais coisas."
@@ -423,8 +453,8 @@ class Intencoes:
                          r"a primeira|a segunda|a pasta|mostra a pasta|onde fica a pasta|primeiro|segundo|terceiro|quarto|quinto|"
                          r"ultimo|1|2|3|4|5)\b", p):
             return None
-        sobra = re.sub(r"\b(abr[ea]|abrir|pode|sim|isso|esse|essa|mesmo|o|a|os|as|pra|para|mim|me|por|favor|pasta|mostra|onde|"
-                       r"fica|dele|dela|numero|n|mantiqueira|ok|quero|" + "|".join(ORDINAIS) + r")\b", " ", p)
+        sobra = re.sub(r"\b(abr[ea]|abrir|pode|sim|isso|esse|essa|este|esta|mesmo|o|a|os|as|pra|para|mim|me|por|favor|pasta|"
+                       r"mostra|onde|fica|dele|dela|ele|ela|entao|agora|ai|la|logo|arquivo|numero|n|mantiqueira|ok|quero|" + "|".join(ORDINAIS) + r")\b", " ", p)
         if len(sobra.split()) > 1:
             return None
         idx = 0
@@ -472,6 +502,16 @@ class Intencoes:
         resto = RX_ABRIR.sub(" ", resto)
         consulta = re.sub(r"\s+", " ", RX_LIXO.sub(" ", resto)).strip()
         consulta = re.sub(r"\b(o|a|arquivo|pra|para|mim|favor|por)\b", " ", consulta).strip()
+        sem_pronome = re.sub(r"\s+", " ", RX_PRONOME.sub(" ", consulta)).strip()
+        b = getattr(self, "ultima_busca", None)
+        if len(sem_pronome) < 2 and b and time.time() - self.quando_busca < 900:
+            # "abre ele": o arquivo da última busca
+            consulta = b["consulta"]
+            if onde == "tudo":
+                onde, lugar = b["onde"], b["lugar"]
+            exts = exts or b["exts"]
+        else:
+            consulta = sem_pronome or consulta
         if len(consulta) < 2:
             return f"Qual arquivo o {self._trat()} quer que eu abra?"
         tipo_txt = (" " + NOME_TIPO.get(exts[0], "")) if exts else ""
@@ -482,6 +522,8 @@ class Intencoes:
                 os.startfile(c)
                 return f"Abrindo {os.path.basename(c)}."
         self.consulta, self.quando_busca = consulta, time.time()
+        self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
+                             "achou": len(exatos), "parecidos": len(parecidos)}
         if len(exatos) == 1:
             r = exatos[0]
             if ix:
