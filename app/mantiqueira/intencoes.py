@@ -622,6 +622,13 @@ class Intencoes:
                     f"clique em Entrar e faça o login uma vez. Depois me pergunte de novo.")
         if not d.get("linhas"):
             return f"Entrei no sistema de {s['nome']}, mas a lista veio vazia, {self._trat()}."
+        try:
+            exata = sw.responder(s, d, original)
+        except Exception:
+            log.exception("resposta exata do sistema")
+            exata = None
+        if exata:
+            return exata                                # resposta tirada direto da tabela, sem a IA
         self.n.contexto_extra = sw.formatar(s, d, original)
         return None                                     # a IA responde usando os dados lidos
 

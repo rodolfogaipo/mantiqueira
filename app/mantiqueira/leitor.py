@@ -33,9 +33,17 @@ def _cacheado(chave, ttl, fn):
     return v
 
 
-def _txt(v):
+def _txt(v, pct=False):
+    import datetime as _dt
     if v is None:
         return ""
+    if isinstance(v, _dt.datetime):
+        return v.strftime("%d/%m/%Y") if (v.hour, v.minute) == (0, 0) else v.strftime("%d/%m/%Y %H:%M")
+    if isinstance(v, _dt.date):
+        return v.strftime("%d/%m/%Y")
+    if pct and isinstance(v, (int, float)):
+        x = v * 100
+        return (f"{x:.1f}".replace(".", ",")) + "%"
     if isinstance(v, float):
         return str(int(v)) if v.is_integer() else f"{v:.4f}".rstrip("0").rstrip(".").replace(".", ",")
     return str(v).strip()
@@ -84,6 +92,11 @@ def planilhas_abertas():
         except Exception:
             return dados
         try:
+            ativo_wb = ativo_ws = ""
+            try:
+                ativo_wb, ativo_ws = str(xl.ActiveWorkbook.Name), str(xl.ActiveSheet.Name)
+            except Exception:
+                pass
             for i in range(1, xl.Workbooks.Count + 1):
                 wb = xl.Workbooks.Item(i)
                 for j in range(1, wb.Worksheets.Count + 1):
@@ -100,8 +113,19 @@ def planilhas_abertas():
                             v = v()
                         if not isinstance(v, (tuple, list)):
                             v = ((v,),)
-                        linhas = [[_txt(x) for x in (row if isinstance(row, (tuple, list)) else (row,))] for row in v]
-                        dados[(str(wb.Name), str(ws.Name))] = {"linhas": linhas, "lin0": r0, "col0": c0}
+                        # colunas em porcentagem: olha o formato de algumas células de cada coluna
+                        pct = set()
+                        amostra = [r0 + min(nl - 1, k) for k in (2, 5, 10, nl - 1)]
+                        for k in range(nc):
+                            try:
+                                if any("%" in str(ws.Cells(rr, c0 + k).NumberFormat) for rr in set(amostra)):
+                                    pct.add(k)
+                            except Exception:
+                                pass
+                        linhas = [[_txt(x, k in pct) for k, x in enumerate(row if isinstance(row, (tuple, list)) else (row,))]
+                                  for row in v]
+                        dados[(str(wb.Name), str(ws.Name))] = {"linhas": linhas, "lin0": r0, "col0": c0,
+                                                               "ativa": (str(wb.Name), str(ws.Name)) == (ativo_wb, ativo_ws)}
                     except Exception:
                         log.debug("aba ilegível", exc_info=True)
         except Exception:
@@ -118,56 +142,120 @@ def _col(n):
     return s
 
 
+ULTIMAS_LINHAS = []          # linhas exatas usadas na última resposta (mostradas na tela como fonte)
+
+
+def _cabecalho(linhas):
+    """Índice da linha de cabeçalho: entre as 15 primeiras, a que tem mais textos (não números) preenchidos."""
+    melhor, idx = -1, 0
+    for i, row in enumerate(linhas[:15]):
+        n = sum(1 for c in row if c and not re.fullmatch(r"[-+]?[\d.,%]+|\d{2}/\d{2}/\d{4}.*", c))
+        if n > melhor:
+            melhor, idx = n, i
+    return idx
+
+
+def _datas_da_pergunta(p):
+    """Datas citadas ('23-08-2026', '23/08', '23 de agosto') no formato dd/mm/aaaa ou dd/mm."""
+    import datetime as _dt
+    meses = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+             "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+    out = []
+    for m in re.finditer(r"\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b", p):
+        d, mm, a = int(m.group(1)), int(m.group(2)), m.group(3)
+        if 1 <= d <= 31 and 1 <= mm <= 12:
+            if a:
+                a = int(a) + (2000 if int(a) < 100 else 0)
+                out.append(f"{d:02d}/{mm:02d}/{a}")
+            else:
+                out.append(f"{d:02d}/{mm:02d}/")
+    for m in re.finditer(r"\b(\d{1,2}) de (" + "|".join(meses) + r")(?: de (\d{4}))?", p):
+        d, mm = int(m.group(1)), meses[m.group(2)]
+        out.append(f"{d:02d}/{mm:02d}/{m.group(3)}" if m.group(3) else f"{d:02d}/{mm:02d}/")
+    return out
+
+
 def trechos_planilhas(pergunta, maximo=40):
-    """Linhas das planilhas abertas que têm a ver com a pergunta (com o cabeçalho junto)."""
+    """Linhas das planilhas abertas que têm a ver com a pergunta (com o cabeçalho certo junto).
+    Se a pergunta cita uma data, manda SÓ a(s) linha(s) dessa data, para não haver confusão de semana."""
     dados = planilhas_abertas()
+    ULTIMAS_LINHAS.clear()
     if not dados:
         return []
-    termos = [t for t in re.findall(r"[0-9a-z,.]+", textutil.sem_acento(pergunta.lower())) if len(t) >= 2]
+    p = textutil.sem_acento(pergunta.lower())
+    datas = _datas_da_pergunta(p)
+    p_sem_datas = re.sub(r"\b\d{1,2}[/\-.]\d{1,2}(?:[/\-.]\d{2,4})?\b", " ", p)
+    termos = [t for t in re.findall(r"[0-9a-z,.]+", p_sem_datas) if len(t) >= 2]
     termos = [t for t in termos if t not in {"qual", "quanto", "quantos", "quantas", "que", "na", "no", "da", "do", "de",
                                               "planilha", "excel", "aba", "linha", "coluna", "valor", "preco", "me", "fala",
-                                              "diz", "tem", "esta", "aberta", "aberto", "um", "uma", "os", "as", "o", "a", "e"}]
+                                              "diz", "tem", "esta", "aberta", "aberto", "um", "uma", "os", "as", "o", "a", "e",
+                                              "semana", "dia", "fez", "feito", "feitos", "teve", "em", "foi", "foram", "mantiqueira"}]
+    # abas citadas pelo nome ("a Máyra", "plano de corte") ganham prioridade; depois, a aba que está na tela
+    citadas = [k for k in dados if any(len(w) >= 3 and re.search(r"\b" + re.escape(w) + r"\b", p)
+                                       for w in re.findall(r"[a-z0-9]+", textutil.sem_acento(k[1].lower())))]
+    ordem = citadas or sorted(dados, key=lambda k: not dados[k].get("ativa"))
     saida = []
-    for (wb, aba), d in dados.items():
+    for (wb, aba) in ordem:
+        d = dados[(wb, aba)]
         linhas = d["linhas"]
         if not linhas:
             continue
-        cab = linhas[0]
+        h = _cabecalho(linhas)
+        cab = linhas[h]
+        corpo = list(enumerate(linhas[h + 1:], start=h + 1))
         achadas = []
-        for i, row in enumerate(linhas[1:], start=1):
-            alvo = textutil.sem_acento(" ".join(row).lower())
-            pontos = sum(1 for t in termos if t in alvo)
-            if pontos:
-                achadas.append((pontos, i, row))
+        if datas:
+            for i, row in corpo:
+                if any(c.startswith(dt_) or c == dt_.rstrip("/") for c in row for dt_ in datas):
+                    achadas.append((9, i, row))
+        if not achadas:
+            for i, row in corpo:
+                alvo = textutil.sem_acento(" ".join(row).lower())
+                pontos = sum(1 for t in termos if t in alvo)
+                if pontos and not datas:
+                    achadas.append((pontos, i, row))
         cab_alvo = textutil.sem_acento(" ".join(cab).lower())
-        cab_bate = any(t in cab_alvo for t in termos) or textutil.sem_acento(wb.lower()).split(".")[0] in \
-            textutil.sem_acento(pergunta.lower())
+        cab_bate = any(t in cab_alvo for t in termos) or (wb, aba) in citadas or d.get("ativa") or \
+            textutil.sem_acento(wb.lower()).split(".")[0] in p
         if not achadas and not cab_bate:
             continue
         achadas.sort(key=lambda x: (-x[0], x[1]))
-        bloco = [f"[Planilha aberta: {wb} — aba {aba} — {len(linhas) - 1} linhas]",
-                 "Cabeçalho: " + " | ".join(f"{_col(d['col0'] + k)}={c}" for k, c in enumerate(cab) if c)]
-        mostrar = achadas[:15] if achadas else [(0, i, linhas[i]) for i in range(1, min(len(linhas), 16))]
-        for _, i, row in sorted(mostrar, key=lambda x: x[1]):
-            bloco.append(f"Linha {d['lin0'] + i}: " + " | ".join(
-                f"{cab[k] if k < len(cab) and cab[k] else _col(d['col0'] + k)}={c}" for k, c in enumerate(row) if c))
-        # totais numéricos de cada coluna (o Mantiqueira não precisa somar de cabeça)
-        totais = []
-        for k, nome in enumerate(cab):
-            nums = []
-            for row in linhas[1:]:
-                if k < len(row):
-                    s = row[k].replace(".", "").replace(",", ".") if re.fullmatch(r"-?[\d.]+,\d+|-?\d+", row[k] or "") else ""
-                    try:
-                        nums.append(float(s)) if s else None
-                    except ValueError:
-                        pass
-            if len(nums) >= 3 and nome:
-                totais.append(f"{nome}: soma {_txt(sum(nums))}, média {_txt(sum(nums) / len(nums))}")
-        if totais:
-            bloco.append("Totais das colunas: " + "; ".join(totais[:10]))
+
+        def fmt(i, row):
+            return f"Linha {d['lin0'] + i}: " + " | ".join(
+                f"{cab[k] if k < len(cab) and cab[k] else _col(d['col0'] + k)}={c}" for k, c in enumerate(row) if c)
+        bloco = [f"[Planilha aberta: {wb} — aba {aba}{' (a que está na tela)' if d.get('ativa') else ''} — "
+                 f"{len(corpo)} linhas de dados]",
+                 "Cabeçalho (linha " + str(d["lin0"] + h) + "): " +
+                 " | ".join(f"{_col(d['col0'] + k)}={c}" for k, c in enumerate(cab) if c)]
+        if datas and achadas:
+            bloco.append(f"LINHA EXATA DA DATA PEDIDA ({', '.join(datas)}) — responda usando SOMENTE esta linha:")
+            for _, i, row in achadas[:3]:
+                bloco.append(fmt(i, row))
+                ULTIMAS_LINHAS.append(f"{aba} · " + fmt(i, row))
+        else:
+            if datas:
+                bloco.append(f"ATENÇÃO: nenhuma linha desta aba tem a data {', '.join(datas)}. Diga que não encontrou essa data.")
+            mostrar = achadas[:15] if achadas else ([] if datas else [(0, i, row) for i, row in corpo[:15]])
+            for _, i, row in sorted(mostrar, key=lambda x: x[1]):
+                bloco.append(fmt(i, row))
+            totais = []
+            for k, nome in enumerate(cab):
+                nums = []
+                for _, row in corpo:
+                    if k < len(row):
+                        x = row[k].rstrip("%")
+                        s_ = x.replace(".", "").replace(",", ".") if re.fullmatch(r"-?[\d.]+,\d+|-?\d+", x or "") else ""
+                        try:
+                            nums.append(float(s_)) if s_ else None
+                        except ValueError:
+                            pass
+                if len(nums) >= 3 and nome:
+                    totais.append(f"{nome}: soma {_txt(sum(nums))}, média {_txt(sum(nums) / len(nums))}")
+            if totais and not datas:
+                bloco.append("Totais das colunas: " + "; ".join(totais[:10]))
         saida.append("\n".join(bloco))
-        if sum(len(b) for b in saida) > 7000 or len(saida) >= 4:
+        if sum(len(b) for b in saida) > 7000 or len(saida) >= 3 or (citadas and len(saida) >= len(citadas)):
             break
     return saida
 

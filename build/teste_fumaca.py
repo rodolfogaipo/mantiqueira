@@ -436,6 +436,42 @@ def _():
     print(f"::notice title=Conversa de busca::{r1} %0A{r2} %0A{r3}", flush=True)
 
 
+@etapa("respostas exatas: CNPs e planilha por data")
+def _():
+    import datetime as dt
+    from mantiqueira.config import Config
+    from mantiqueira.sistemas_web import SistemasWeb
+    from mantiqueira import leitor
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.detalhe_texto = ""
+    sw = SistemasWeb(n)
+    ontem = (dt.date.today() - dt.timedelta(days=1)).strftime("%d/%m/%Y")
+    cab = ["ID", "Produto", "Pedido", "Linha", "Carga", "Qtd Peças", "Data Prevista", "Aprovação Gerência", "Setores",
+           "Status Geral", "Criado por", "Data Criação", "Ações"]
+    linhas = [["952", "banqueta miches Similar: banqueta pora", "121861", "banqueta", "-", "6", "07/12/2026",
+               ontem + " 15:06", "TUBULAR: pendente", "em análise pcp", "Ana Laura Alves Ribeiro", ontem + " 14:56", ""],
+              ["951", "poltrona miches Similar: poltrona pora", "121861", "poltrona", "-", "8", "07/12/2026",
+               ontem + " 15:05", "TUBULAR: pendente", "em análise pcp", "Ana Laura Alves Ribeiro", ontem + " 14:55", ""]]
+    d = {"cab": cab, "linhas": linhas, "hora": "08:00", "paginas": 1}
+    s = sw.lista()[0]
+    r = [sw.responder(s, d, q) for q in ("BANQUETA MICHES NA ORIGUS QUAL DIA PREVISTA?", "qual o pedido da poltrona miches",
+                                          "quais cnps foram criados ontem", "quem criou o cnp da banqueta miches")]
+    assert "07/12/2026" in r[0] and "banqueta" in r[0] and "15:06" not in r[0], r[0]
+    assert "121861" in r[1] and "poltrona" in r[1], r[1]
+    assert r[2].startswith("2 CNPs criados"), r[2]
+    assert "Ana Laura" in r[3], r[3]
+    lin = [["CONTROLE", "", ""], ["Semana", "Data", "Projetos"]]
+    for k in range(1, 40):
+        lin.append([str(k), (dt.date(2026, 1, 4) + dt.timedelta(weeks=k - 1)).strftime("%d/%m/%Y"), str(100 + k)])
+    leitor.planilhas_abertas = lambda: {("CONTROLE_EQUIPE.xlsx", "Máyra"): {"linhas": lin, "lin0": 1, "col0": 1, "ativa": True}}
+    t = "\n".join(leitor.trechos_planilhas("quantos projetos a mayra fez na semana de 23-08-2026"))
+    assert "LINHA EXATA" in t and "Data=23/08/2026" in t and "Data=16/08/2026" not in t, t
+    print("::notice title=Respostas exatas::" + " %0A".join(x.replace("%", "%25") for x in r + [t.splitlines()[-1]])[:1500], flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

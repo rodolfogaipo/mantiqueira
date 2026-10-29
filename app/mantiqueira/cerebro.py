@@ -146,6 +146,7 @@ Sobre o sistema da empresa (CNPs, Órigus): use SOMENTE os DADOS DO SISTEMA DA E
 Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
 Sobre o que ele fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
 NUNCA diga onde um arquivo está guardado se isso não estiver nos dados abaixo: diga que pode procurar ("quer que eu procure no computador ou na rede?").
+Quando aparecer "LINHA EXATA DA DATA PEDIDA", responda SOMENTE com os valores dessa linha, usando o nome da coluna como está no cabeçalho; nunca use a linha de outra semana ou data.
 Quando houver DADOS DAS PLANILHAS ABERTAS, DOCUMENTOS DO WORD, SOLIDWORKS ou SISTEMA DA EMPRESA abaixo, responda com esses valores exatos e diga de onde tirou (qual planilha/aba ou sistema). Para somas, use os "Totais das colunas" já calculados.
 Para dúvidas sobre programas (SolidWorks, AutoCAD, SketchUp, 3ds Max, Aspire, CypCut, Office) e sobre os documentos dele, use os TRECHOS DA BASE DE CONHECIMENTO quando houver: diga o nome do comando, o atalho e onde fica no menu. Se não houver trecho e você não tiver certeza, diga que não tem certeza em vez de inventar um comando.
 
@@ -253,6 +254,12 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
             resposta = "Não consegui concluir isso agora, " + trat + "."
         if not resposta:
             resposta = "Pronto."
+        try:
+            from . import leitor
+            if leitor.ULTIMAS_LINHAS and not n.detalhe_texto:
+                n.detalhe_texto = "FONTE:\n" + "\n".join(leitor.ULTIMAS_LINHAS)
+        except Exception:
+            pass
         self._guardar(pergunta, resposta)
         return resposta
 

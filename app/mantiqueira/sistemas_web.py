@@ -17,18 +17,47 @@ PADRAO = [{"nome": "CNPs", "url": "http://192.168.1.96:8080/cnp/cnps",
 JS_LER = r"""
 (function(){
   function txt(e){ return (e.innerText || e.textContent || '').replace(/\s+/g,' ').trim(); }
+  // monta a grade da tabela respeitando células mescladas (rowspan/colspan) e ignorando tabelas dentro de células
+  function grade(t){
+    var rows = Array.prototype.slice.call(t.rows), ocup = {}, saida = [];
+    rows.forEach(function(tr, r){
+      var out = [], novos = [], c = 0;
+      function pula(){ while (ocup[r + '_' + c] !== undefined){ out[c] = ocup[r + '_' + c]; c++; } }
+      var cells = Array.prototype.slice.call(tr.cells), soTh = cells.length > 0;
+      cells.forEach(function(cel){
+        pula();
+        var x = txt(cel), rs = Math.max(1, cel.rowSpan || 1), cs = Math.max(1, cel.colSpan || 1);
+        if (cel.tagName !== 'TH') soTh = false;
+        for (var dr = 0; dr < rs; dr++) for (var dc = 0; dc < cs; dc++){
+          if (dr > 0) ocup[(r + dr) + '_' + (c + dc)] = (dc === 0 ? x : '');
+        }
+        for (var k = 0; k < cs; k++){ out[c + k] = (k === 0 ? x : ''); }
+        novos.push(c);
+        c += cs;
+      });
+      pula();
+      for (var i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = '';
+      var cab = (tr.parentElement && tr.parentElement.tagName === 'THEAD') || soTh;
+      saida.push({c: out, novos: novos, cab: cab, cont: r > 0 && ocup[r + '_0'] !== undefined});
+    });
+    var cab = [], regs = [];
+    saida.forEach(function(l){
+      if (l.cab){ if (l.c.filter(function(x){ return x; }).length >= cab.filter(function(x){ return x; }).length) cab = l.c; return; }
+      if (!l.c.join('').length) return;
+      if (l.cont && regs.length){                       // continuação de um registro com células mescladas
+        var ant = regs[regs.length - 1];
+        l.novos.forEach(function(i){ if (l.c[i]) ant[i] = ant[i] ? ant[i] + ' ; ' + l.c[i] : l.c[i]; });
+      } else regs.push(l.c.slice());
+    });
+    return {cab: cab, linhas: regs, nlinhas: rows.length};
+  }
   var tabelas = [];
   document.querySelectorAll('table').forEach(function(t){
-    var cab = [], linhas = [];
-    var ths = t.querySelectorAll('thead th, thead td');
-    if (!ths.length){ var p = t.querySelector('tr'); if (p) ths = p.querySelectorAll('th'); }
-    ths.forEach(function(h){ cab.push(txt(h)); });
-    t.querySelectorAll('tbody tr').forEach(function(tr){
-      var c = []; tr.querySelectorAll('td,th').forEach(function(td){ c.push(txt(td)); });
-      if (c.join('').length) linhas.push(c);
-    });
-    if (linhas.length) tabelas.push({cab: cab, linhas: linhas});
+    if (t.parentElement && t.parentElement.closest('td, th')) return;   // tabela dentro de célula: faz parte da outra
+    var g = grade(t);
+    if (g.linhas.length) tabelas.push(g);
   });
+  tabelas.sort(function(a, b){ return b.linhas.length - a.linhas.length; });
   if (!tabelas.length){
     var rows = document.querySelectorAll('[role=row]');
     var cab = [], linhas = [];
@@ -38,7 +67,7 @@ JS_LER = r"""
       var c = []; r.querySelectorAll('[role=cell],[role=gridcell]').forEach(function(x){ c.push(txt(x)); });
       if (c.length) linhas.push(c);
     });
-    if (linhas.length) tabelas.push({cab: cab, linhas: linhas});
+    if (linhas.length) tabelas.push({cab: cab, linhas: linhas, nlinhas: rows.length});
   }
   var prox = null;
   function livre(b){
@@ -231,6 +260,9 @@ class SistemasWeb:
             res = {"login": False, "cab": cab, "linhas": linhas, "paginas": pag, "hora": time.strftime("%H:%M")}
             self.cache[nome] = (time.time(), res)
             log.info("sistema %s: %d linhas em %d páginas", nome, len(linhas), pag)
+            log.info("sistema %s: colunas %s", nome, " | ".join(cab))
+            for l in linhas[:2]:
+                log.info("sistema %s: exemplo %s", nome, " | ".join(l)[:400])
             return res
 
     def _eval(self, w, js, json_=True):
@@ -318,20 +350,15 @@ class SistemasWeb:
         if d.get("login") or not d.get("linhas"):
             return
         cab, linhas = d["cab"], d["linhas"]
-        i_id = self._coluna(cab, "id")
-        if i_id is None or (cab[i_id] or "").strip().lower() not in ("id", "#", "código", "codigo", "cód", "cod"):
-            i_id = next((i for i, c in enumerate(cab) if textutil.sem_acento((c or "").lower()).strip() in ("id", "#", "codigo", "cod")), None)
-        i_prod = self._coluna(cab, "produto")
-        i_ped = self._coluna(cab, "pedido")
-        i_data = self._coluna(cab, "prev")
-        if i_data is None:
-            i_data = self._coluna(cab, "data")
+        m = self._mapa(cab)
+        i_id, i_prod, i_ped, i_data = m.get("id"), m.get("produto"), m.get("pedido"), m.get("prevista")
 
         def chave(l):
             return (l[i_id] if i_id is not None and i_id < len(l) else " | ".join(l)).strip()
 
         def nome(l):
             prod = l[i_prod] if i_prod is not None and i_prod < len(l) else (l[1] if len(l) > 1 else l[0])
+            prod = re.split(r"\s+similar:", prod, flags=re.I)[0].strip()
             ped = l[i_ped] if i_ped is not None and i_ped < len(l) and l[i_ped] else ""
             return prod + (f", pedido {ped}" if ped else "")
         k_vistos = f"cnp_vistos:{s['nome']}"
@@ -370,6 +397,161 @@ class SistemasWeb:
                 self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, {len(lista)} CNPs têm data prevista para {rotulo}: "
                                    + "; ".join(lista[:4]) + extra + ".")
         db.kv_set(k_av, json.dumps(sorted(avisados), ensure_ascii=False))
+
+    # ------------------------------------------------------------------ respostas exatas (sem a IA)
+    CAMPOS = [  # chave, palavras do cabeçalho, como falar
+        ("id", ("id",), "número"),
+        ("produto", ("produto",), "produto"),
+        ("pedido", ("pedido",), "pedido"),
+        ("linha", ("linha",), "linha"),
+        ("carga", ("carga",), "carga"),
+        ("qtd", ("qtd", "quantidade", "pecas"), "quantidade de peças"),
+        ("prevista", ("prevista", "previsao"), "data prevista"),
+        ("aprovacao", ("aprovacao", "gerencia"), "aprovação da gerência"),
+        ("setores", ("setores", "setor"), "setores"),
+        ("status", ("status", "situacao"), "status"),
+        ("criado_por", ("criado por", "criado", "responsavel"), "criado por"),
+        ("criacao", ("data criacao", "criacao", "cadastro"), "data de criação"),
+    ]
+    PERGUNTA_CAMPO = [
+        ("prevista", r"previst|previs|prazo|entrega|fica pronto|vai ficar pronto|data prevista"),
+        ("aprovacao", r"aprova|gerencia"),
+        ("setores", r"setor|setores|pendente|tubular|pintura|montagem|embalagem|atelie|engenharia"),
+        ("status", r"status|situacao|como esta|andamento"),
+        ("criado_por", r"quem criou|quem cadastrou|criado por|cadastrado por|quem fez"),
+        ("criacao", r"quando (foi )?(criad|cadastrad|entrou)|data de criacao|data da criacao|criado em|cadastrado em"),
+        ("pedido", r"\bpedido\b"),
+        ("qtd", r"quantas pecas|qtd|quantidade"),
+        ("linha", r"\blinha\b"),
+        ("carga", r"\bcarga\b"),
+    ]
+
+    def _mapa(self, cab):
+        mapa = {}
+        cabn = [textutil.sem_acento((c or "").lower()).strip() for c in cab]
+        for chave, palavras, _ in self.CAMPOS:
+            for p in palavras:                          # primeiro: cabeçalho exatamente igual; depois: contém
+                for i, c in enumerate(cabn):
+                    if i not in mapa.values() and (c == p):
+                        mapa[chave] = i
+                        break
+                if chave in mapa:
+                    break
+            if chave not in mapa:
+                for p in palavras:
+                    for i, c in enumerate(cabn):
+                        if i not in mapa.values() and p in c and not (chave == "criacao" and "por" in c) \
+                                and not (chave == "criado_por" and "data" in c):
+                            mapa[chave] = i
+                            break
+                    if chave in mapa:
+                        break
+        return mapa
+
+    def responder(self, s, d, pergunta):
+        """Resposta montada direto da tabela, para não haver erro. None = deixa a IA responder com os dados."""
+        import datetime as dt
+        cab, linhas = d["cab"], d["linhas"]
+        m = self._mapa(cab)
+        if "produto" not in m:
+            return None
+        p = textutil.sem_acento(pergunta.lower())
+
+        def v(l, k):
+            i = m.get(k)
+            return (l[i].strip() if i is not None and i < len(l) else "")
+
+        def nome(l):
+            prod = v(l, "produto")
+            prod = re.split(r"\s+similar:", prod, flags=re.I)[0].strip()
+            return f"CNP {v(l, 'id')}, {prod}" if v(l, "id") else prod
+
+        def ficha(l):
+            partes = [nome(l)]
+            for k, _, fala in self.CAMPOS[2:]:
+                x = v(l, k)
+                if x and x != "-":
+                    partes.append(f"{fala}: {x}")
+            return "; ".join(partes)
+        self.n.detalhe_texto = ""
+        campo = next((k for k, rx in self.PERGUNTA_CAMPO if re.search(rx, p) and k in m), None)
+        # data citada (ontem, hoje, 28/10…) → filtrar pela coluna de data
+        alvo_data = None
+        if re.search(r"\bontem\b", p):
+            alvo_data = dt.date.today() - dt.timedelta(days=1)
+        elif re.search(r"\banteontem\b", p):
+            alvo_data = dt.date.today() - dt.timedelta(days=2)
+        elif re.search(r"\bhoje\b", p):
+            alvo_data = dt.date.today()
+        elif re.search(r"\bamanha\b", p):
+            alvo_data = dt.date.today() + dt.timedelta(days=1)
+        else:
+            md = re.search(r"\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b", p)
+            if md:
+                ano = int(md.group(3)) if md.group(3) else dt.date.today().year
+                ano = ano + 2000 if ano < 100 else ano
+                try:
+                    alvo_data = dt.date(ano, int(md.group(2)), int(md.group(1)))
+                except ValueError:
+                    alvo_data = None
+        ignorar = {"cnp", "cnps", "origus", "syntex", "sistema", "programa", "qual", "quais", "quanto", "quantos", "quantas",
+                   "data", "dia", "prevista", "previsto", "previsao", "da", "do", "de", "na", "no", "o", "a", "os", "as", "e",
+                   "tem", "que", "ta", "esta", "estao", "me", "fala", "diz", "pra", "para", "qual", "quando", "foi", "foram",
+                   "ontem", "hoje", "amanha", "anteontem", "um", "uma", "mantiqueira", "senhor", "aprovacao", "gerencia",
+                   "aprovado", "aprovados", "aprovada", "aprovadas", "criado", "criados", "criada", "criadas", "cadastrado",
+                   "cadastrados", "status", "pedido", "setor", "setores", "lista", "listar", "mostra", "olha", "ve", "veja",
+                   "consulta", "fica", "pronto", "pronta", "entrega", "prazo", "quem", "criou", "por", "favor", "todos",
+                   "todas", "novo", "novos", "nova", "novas", "agora", "ai", "la", "em", "com", "pecas", "qtd", "quantidade",
+                   "linha", "carga", "situacao", "andamento", "como", "pendente", "pendentes", "ultimo", "ultimos",
+                   "teve", "tiveram", "houve", "ha", "existe", "existem", "algum", "alguma", "alguns", "algumas", "sao",
+                   "sobre", "saber", "quero", "preciso", "ver", "informacao", "informacoes", "registro", "registros",
+                   "nele", "nela", "dele", "dela", "isso", "esse", "essa", "deu", "tudo"}
+        termos = [t for t in re.findall(r"[a-z0-9]{2,}", p) if t not in ignorar and not re.fullmatch(r"\d{1,2}|\d{4}", t)]
+        escolhidas = linhas
+        if termos:
+            def pontos(l):
+                alvo = textutil.sem_acento(" ".join([v(l, "produto"), v(l, "id"), v(l, "pedido"), v(l, "linha")]).lower())
+                return sum(1 for t in termos if re.search(r"\b" + re.escape(t), alvo))
+            pont = [(pontos(l), l) for l in linhas]
+            melhor = max((x[0] for x in pont), default=0)
+            if melhor == 0 and alvo_data:
+                termos = []
+            elif melhor == 0:
+                return (f"Li {len(linhas)} CNPs no sistema e não encontrei nenhum com \"{' '.join(termos)}\", "
+                        f"{self.n.cfg['tratamento']}.")
+            # o nome do produto (sem o "Similar") tem prioridade
+            escolhidas = [l for pt, l in pont if pt == melhor] if termos else linhas
+            exatas = [] if not termos else [l for l in escolhidas if all(re.search(r"\b" + re.escape(t), textutil.sem_acento(nome(l).lower()))
+                                                   for t in termos)]
+            escolhidas = exatas or escolhidas
+        if alvo_data:
+            col = campo if campo in ("prevista", "aprovacao", "criacao") else ("criacao" if "criacao" in m else "prevista")
+            escolhidas = [l for l in escolhidas if self._data(v(l, col)) == alvo_data]
+            rot = {"criacao": "criados", "aprovacao": "aprovados pela gerência", "prevista": "com data prevista para"}[col]
+            quando = alvo_data.strftime("%d/%m/%Y")
+            if not escolhidas:
+                return f"Nenhum CNP {rot} {quando}, {self.n.cfg['tratamento']}. Li {len(linhas)} CNPs no sistema."
+            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:30])
+            if len(escolhidas) == 1:
+                return f"Um CNP {rot} {quando}: {ficha(escolhidas[0])}."
+            return (f"{len(escolhidas)} CNPs {rot} {quando}: " + "; ".join(nome(l) for l in escolhidas[:6])
+                    + ". A lista completa está na tela.")
+        if termos:
+            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:20])
+            if campo:
+                fala = next(f for k, _, f in self.CAMPOS if k == campo)
+                if len(escolhidas) == 1:
+                    return f"{nome(escolhidas[0])}: {fala} {v(escolhidas[0], campo) or 'não preenchido'}."
+                return f"Encontrei {len(escolhidas)}: " + "; ".join(f"{nome(l)}, {fala} {v(l, campo) or 'não preenchido'}"
+                                                              for l in escolhidas[:5]) + "."
+            if len(escolhidas) == 1:
+                return ficha(escolhidas[0]) + "."
+            return f"Encontrei {len(escolhidas)} CNPs: " + "; ".join(nome(l) for l in escolhidas[:6]) + ". Os detalhes estão na tela."
+        if re.search(r"\b(quais|quantos|lista|listar|mostra|todos)\b", p):
+            self.n.detalhe_texto = "\n".join(ficha(l) for l in linhas[:60])
+            prim = "; ".join(f"{nome(l)}, previsto {v(l, 'prevista') or 'sem data'}" for l in linhas[:5])
+            return f"Há {len(linhas)} CNPs no sistema. Os primeiros: {prim}. A lista está na tela."
+        return None
 
     def contexto(self, pergunta):
         """(sistema, texto) para a IA. Em caso de erro/login, o texto explica o problema."""
