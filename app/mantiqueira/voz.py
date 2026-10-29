@@ -196,9 +196,16 @@ class Voz:
                         self._falar_xtts(texto, voz_id)
                         self.tipo_atual = "NATURAL"
                     except Exception:
-                        log.exception("voz natural falhou; usando a rápida")
+                        # falta de memória momentânea na placa: limpa e tenta de novo com a MESMA voz
+                        log.exception("voz natural falhou; tentando de novo")
                         self._limpar_gpu()
-                        self._falar_piper(texto)
+                        try:
+                            self._falar_xtts(texto, voz_id)
+                            self.tipo_atual = "NATURAL"
+                        except Exception:
+                            log.exception("voz natural falhou de novo; usando a rápida só nesta frase")
+                            self._limpar_gpu()
+                            self._falar_piper(texto)
                 else:
                     self._falar_piper(texto)
             except Exception:

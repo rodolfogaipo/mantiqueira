@@ -106,8 +106,23 @@ class Nucleo:
         self.rotinas = Rotinas(self)
 
         def voz():
+            # uma IA esquecida aberta (de uma abertura anterior) segura a placa de vídeo e a voz natural
+            # não carrega — aí ele falaria com a voz rápida. Fecha as sobras antes.
+            try:
+                import psutil
+                for pr in psutil.process_iter(["name", "exe"]):
+                    if (pr.info["name"] or "").lower() == "llama-server.exe" and \
+                            str(paths.BIN).lower() in (pr.info["exe"] or "").lower():
+                        log.info("fechando IA que tinha ficado aberta (pid %s)", pr.pid)
+                        pr.kill()
+                time.sleep(1.5)
+            except Exception:
+                log.exception("limpar IA antiga")
             self.voz = Voz(self, self._voz_inicio, self._voz_fim)
             self.voz.carregar()
+            if self.voz.xtts is None and paths.XTTS.joinpath("model.pth").exists():
+                time.sleep(8)                          # placa ainda liberando memória: tenta de novo
+                self.voz.carregar()
         self._passo("Carregando a voz…", voz)
 
         def conhecimento():
@@ -269,7 +284,21 @@ class Nucleo:
             return
         if self.ouvido:
             self.ouvido.ocupar()
-        threading.Thread(target=self._processar, args=(texto, origem), daemon=True).start()
+        # um pedido de cada vez, na ordem em que chegaram (as respostas não se misturam)
+        if not hasattr(self, "_fila_pedidos"):
+            import queue as _q
+            self._fila_pedidos = _q.Queue()
+            threading.Thread(target=self._loop_pedidos, daemon=True, name="pedidos").start()
+        self._fila_pedidos.put((texto, origem))
+
+    def _loop_pedidos(self):
+        while True:
+            texto, origem = self._fila_pedidos.get()
+            try:
+                self._processar(texto, origem)
+            except Exception:
+                log.exception("pedido")
+                self._liberar()
 
     def _processar(self, texto, origem):
         if self.voz and getattr(self.voz, "falando", False):

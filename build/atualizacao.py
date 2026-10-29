@@ -8,7 +8,8 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 # bibliotecas que não existiam na instalação 1.0 (pastas e metadados dentro de site-packages)
 EXTRAS = ["pypdf", "pypdf-*", "pypdfium2", "pypdfium2-*", "pypdfium2_raw", "comtypes", "comtypes-*",
-          "imageio_ffmpeg", "imageio_ffmpeg-*", "pystray", "pystray-*", "six.py", "six-*"]
+          "imageio_ffmpeg", "imageio_ffmpeg-*", "pystray", "pystray-*", "six.py", "six-*",
+          "playwright", "playwright-*", "greenlet", "greenlet-*", "pyee", "pyee-*", "typing_extensions.py", "typing_extensions-*"]
 
 saida = Path(sys.argv[1]).resolve() / "Mantiqueira-Atualizacao.zip"
 saida.parent.mkdir(parents=True, exist_ok=True)

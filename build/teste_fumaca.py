@@ -48,6 +48,7 @@ def _():
     from mantiqueira import config, db, textutil, sistema, ia, ouvido, voz, olhos, tela, cerebro, rotinas, nucleo, api  # noqa
     from mantiqueira import indice, leitor, sistemas_web, memoria, frases, intencoes, holo  # noqa
     import pystray  # noqa
+    import playwright.sync_api  # noqa
     n = nucleo.Nucleo()                      # o mesmo que o programa faz ao abrir
     a = api.Api(n)
     e = a.estado()
@@ -379,7 +380,7 @@ def _():
 
     class VozFalsa:
         def voz_padrao(self):
-            return "teste"
+            return "xtts:teste"
 
         def gerar_audio(self, texto, voz_id=None):
             t = np.arange(24000) / 24000
@@ -392,7 +393,7 @@ def _():
             pass
     assert not saudacao.pronta(cfg)
     assert saudacao.gravar(VozFalsa(), cfg) and saudacao.pronta(cfg)
-    assert not saudacao.precisa_gravar(cfg, "teste")
+    assert not saudacao.precisa_gravar(cfg, "xtts:teste")
     tocou = saudacao.tocar(cfg, esperar=True)
     travada = nucleo.Nucleo._tela_travada()
     print(f"::notice title=Saudação::gravada ok, tocou={tocou}, tela travada={travada}", flush=True)
@@ -491,6 +492,27 @@ def _():
     assert rk2 and "Máyra" in rk2[0].split(".")[0], rk2
     r += [rk[0], rk2[0]]
     print("::notice title=Respostas exatas::" + " %0A".join(x.replace("%", "%25") for x in r + [t.splitlines()[-1]])[:1500], flush=True)
+
+
+@etapa("leitura do sistema de CNPs pelo navegador (página de teste)")
+def _():
+    from mantiqueira.config import Config
+    from mantiqueira.sistemas_web import SistemasWeb
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.detalhe_texto = ""; n.falar_aviso = lambda t: None
+    sw = SistemasWeb(n)
+    pagina = Path(__file__).with_name("teste_cnps.html").resolve().as_uri()
+    s = {"nome": "Teste", "url": pagina, "palavras": "cnp"}
+    t0 = time.time()
+    d = sw.ler(s, cache_seg=0)
+    assert not d.get("login") and len(d["linhas"]) == 22, (d.get("login"), len(d.get("linhas") or []))
+    assert d["linhas"][0][0] == "952" and d["linhas"][0][6] == "07/12/2026", d["linhas"][0]
+    r = sw.responder(s, d, "qual a data prevista da banqueta miches")
+    assert "07/12/2026" in r, r
+    print(f"::notice title=Navegador do sistema::{len(d['linhas'])} CNPs em {d['paginas']} páginas, {time.time() - t0:.0f}s — {r}", flush=True)
 
 
 @etapa("conversas de teste (secretário)")

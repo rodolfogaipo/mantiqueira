@@ -597,7 +597,8 @@ class Intencoes:
             return None
         if re.search(r"\b(login|entrar|logar|fazer login)\b", p):
             sw.abrir_para_login(s)
-            return f"Abri o sistema de {s['nome']} para o {self._trat()} fazer o login. Depois pode fechar a janela."
+            return (f"Abri o sistema de {s['nome']} numa janela do navegador. Faça o login; quando a lista aparecer, "
+                    f"a janela fecha sozinha.")
         if re.search(r"\b(abr[ea]|abrir|mostra)\b.*\b(sistema|site|pagina|tela)\b|\babre o (sistema|site)\b", p):
             os.startfile(s["url"])
             return f"Abrindo o sistema de {s['nome']} no navegador."
@@ -611,6 +612,16 @@ class Intencoes:
         s = sw.qual(p) or sw.citado_sem_nome(original)
         if not s:
             return None
+        c = sw.cache.get(s["nome"])
+        if not (c and time.time() - c[0] < 180):
+            # leitura demora alguns segundos: avisa para ele não ficar sem resposta
+            aviso = f"Um instante, {self._trat()}. Estou consultando o sistema de {s['nome']}."
+            try:
+                self.n.ultima["assistente"] = aviso
+                if self.n.voz and not self.n.em_silencio():
+                    self.n.voz.falar(aviso)
+            except Exception:
+                pass
         try:
             d = sw.ler(s)
         except Exception as e:

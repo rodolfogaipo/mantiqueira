@@ -319,6 +319,7 @@
       $('cNome').value = g.nome || ''; $('cTrat').value = g.tratamento || '';
       $('cVoz').innerHTML = (c.vozes || []).map(function(v){ return '<option value="' + esc(v.id) + '">' + esc(v.nome) + '</option>'; }).join('') || '<option value="">(nenhuma voz encontrada)</option>';
       $('cVoz').value = c.voz_atual || '';
+      $('cVoz').setAttribute('data-mudou', '');
       $('cMic').innerHTML = '<option value="padrao">Padrão do Windows</option>' + (c.microfones || []).map(function(m){ return '<option value="' + m.id + '">' + esc(m.nome) + '</option>'; }).join('');
       $('cMic').value = g.microfone == null ? 'padrao' : String(g.microfone);
       $('cModo').value = g.modo_ia || 'normal';
@@ -385,6 +386,7 @@
     chamar('escolher_foto').then(function(ok){ $('cFotoOk').textContent = ok ? 'FOTO ESCOLHIDA — APARECE QUANDO O PC FICA PARADO' : 'NENHUMA FOTO ESCOLHIDA'; });
   });
   $('cTestar').addEventListener('click', function(){ chamar('testar_voz', $('cVoz').value); });
+  $('cVoz').addEventListener('change', function(){ $('cVoz').setAttribute('data-mudou', '1'); });
   $('cGravar').addEventListener('click', function(){ $('cAviso').textContent = 'Preparando…'; chamar('gravar_voz'); });
   $('cArqVoz').addEventListener('click', function(){ chamar('usar_arquivo_voz'); });
   $('cDados').addEventListener('click', function(){ chamar('abrir_dados'); });
@@ -397,7 +399,7 @@
   $('cSalvar').addEventListener('click', function(){
     chamar('salvar_config', {
       nome: $('cNome').value.trim() || 'Rodolfo', tratamento: $('cTrat').value.trim() || 'senhor',
-      voz: $('cVoz').value, microfone: $('cMic').value, modo_ia: $('cModo').value,
+      voz: $('cVoz').getAttribute('data-mudou') ? $('cVoz').value : undefined, microfone: $('cMic').value, modo_ia: $('cModo').value,
       ativacao_por_voz: $('cAtiv').checked, responder_falando: $('cFalar').checked,
       olhos_ativos: $('cOlhos').checked, iniciar_com_windows: $('cIni').checked,
       holo_real: $('cHolo').checked, x_esconde: $('cX').checked,

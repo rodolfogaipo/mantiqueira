@@ -1,0 +1,26 @@
+<!doctype html><html><body>
+<aside><button>Cadastros <i>chevron_right</i></button></aside>
+<table><thead><tr><th>ID</th><th>Produto</th><th>Pedido</th><th>Linha</th><th>Carga</th><th>Qtd Peças</th><th>Data Prevista</th><th>Aprovação Gerência</th><th>Setores</th><th>Status Geral</th><th>Criado por</th><th>Data Criação</th><th>Ações</th></tr></thead>
+<tbody id="b"></tbody></table>
+<button class="mat-paginator-navigation-next" aria-label="Próxima página" id="nx">›</button>
+<script>
+var pag=0, dados=[];
+var hoje=new Date(), ontem=new Date(Date.now()-864e5);
+function f(d){return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();}
+dados.push([952,'banqueta miches|Similar: banqueta pora',121861,'banqueta','-',6,'07/12/2026',f(ontem)+' 15:06','em análise pcp','Ana Laura Alves Ribeiro',f(ontem)+' 14:56']);
+dados.push([951,'poltrona miches|Similar: poltrona pora',121861,'poltrona','-',8,'07/12/2026',f(ontem)+' 15:05','em análise pcp','Ana Laura Alves Ribeiro',f(ontem)+' 14:55']);
+for (var i=0;i<20;i++) dados.push([950-i,'mesa '+i,120000+i,'mesa','-',2,'10/11/2026','','aprovado','Fulano','01/10/2026 10:00']);
+function pinta(){ var b=document.getElementById('b'); b.innerHTML=''; dados.slice(pag*15,pag*15+15).forEach(function(l){
+  var setores=['TUBULAR: pendente','PINTURA: pendente','MONTAGEM: pendente','EMBALAGEM: pendente','ATELIÊ: pendente','ENGENHARIA: pendente'];
+  // registro com células mescladas: cada setor numa linha
+  setores.forEach(function(st,k){ var tr=document.createElement('tr');
+    function td(x,rs){var e=document.createElement('td'); e.innerText=x; if(rs) e.rowSpan=rs; tr.appendChild(e);}
+    if(k==0){ td(l[0],6); td(l[1].replace('|','\n'),6); td(l[2],6); td(l[3],6); td(l[4],6); td(l[5],6); td(l[6],6); td(l[7],6); }
+    var n=document.createElement('td'); n.innerHTML='<table><tr><td>'+st+'</td></tr></table>'; tr.appendChild(n);
+    if(k==0){ td(l[8],6); td(l[9],6); td(l[10],6); td('',6); }
+    b.appendChild(tr); });
+ });
+ document.getElementById('nx').disabled=(pag+1)*15>=dados.length; }
+document.getElementById('nx').onclick=function(){pag++;pinta();};
+pinta();
+</script></body></html>

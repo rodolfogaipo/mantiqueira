@@ -45,8 +45,10 @@ def _meta():
 
 
 def pronta(cfg):
-    """Há uma gravação válida para o tratamento atual?"""
-    return WAV.exists() and _meta().get("texto") == texto(cfg)
+    """Há uma gravação válida para o tratamento e a voz atuais?"""
+    m = _meta()
+    voz_ok = (m.get("voz") == cfg["voz"]) if cfg["voz"] else str(m.get("voz", "")).startswith("xtts:")
+    return WAV.exists() and m.get("texto") == texto(cfg) and voz_ok
 
 
 def tocar(cfg, esperar=False):
@@ -75,6 +77,13 @@ def gravar(voz, cfg):
     """Grava a saudação com a voz escolhida (em segundo plano, depois que a voz carregou)."""
     import numpy as np
     voz_id = voz.voz_padrao()
+    escolhida = cfg["voz"] or ""
+    # grava só com a voz que ele escolheu (nunca com a voz rápida por falta da natural)
+    if escolhida and voz_id != escolhida:
+        log.info("saudação não gravada: a voz escolhida (%s) não está carregada agora", escolhida)
+        return False
+    if not escolhida and not voz_id.startswith("xtts:"):
+        return False
     if not voz_id or not precisa_gravar(cfg, voz_id):
         return False
     audio, taxa = voz.gerar_audio(texto(cfg), voz_id)

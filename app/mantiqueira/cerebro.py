@@ -38,8 +38,7 @@ class Cerebro:
         self.n = nucleo
         self.historico = []   # [{"role","content"}]
         self.lembrete_pendente = None
-        for r in self.n.db.conversa_ultimas(8):
-            self.historico.append({"role": "user" if r["papel"] == "usuario" else "assistant", "content": r["texto"]})
+        self._hist_hora = 0   # conversa nova a cada abertura; o histórico antigo fica só no HISTÓRICO da tela
 
     # ------------------------------------------------------------------ contexto
     def _contexto(self, pergunta):
@@ -143,6 +142,7 @@ OBEDIÊNCIA: faça SOMENTE o que ele pediu, nada além. Nunca tome iniciativa de
 Você NÃO consegue fazer nada depois de responder: nunca diga "vou verificar", "vou procurar", "vou abrir" ou "um momento". Ou responda com os dados que estão abaixo, ou diga claramente que não tem essa informação.
 Você não abre arquivos nem procura arquivos: quem faz isso é o próprio programa quando ele diz "abre ..." ou "procura ...". Se ele quiser um arquivo, diga para ele pedir assim: "abre o PDF da mesa luna" ou "procura no computador ...".
 Sobre o sistema da empresa (CNPs, Órigus): use SOMENTE os DADOS DO SISTEMA DA EMPRESA abaixo. Se não houver esses dados abaixo, diga que não conseguiu ler o sistema. Nunca invente CNP, produto, pedido ou data.
+Responda SEMPRE à ÚLTIMA mensagem do usuário. As mensagens anteriores são só contexto: nunca volte a responder uma pergunta antiga.
 Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
 Sobre o que ele fez no computador, use SOMENTE os registros abaixo. Se não houver registro, diga que não encontrou. Nunca invente arquivos, horários ou fatos.
 NUNCA diga onde um arquivo está guardado se isso não estiver nos dados abaixo: diga que pode procurar ("quer que eu procure no computador ou na rede?").
@@ -198,7 +198,9 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 self._guardar(pergunta, direto)
                 return direto
 
-        msgs = [{"role": "system", "content": self._sistema(pergunta)}] + self.historico[-8:] + \
+        if time.time() - self._hist_hora > 900:
+            self.historico = []                          # mais de 15 minutos sem conversar: assunto novo
+        msgs = [{"role": "system", "content": self._sistema(pergunta)}] + self.historico[-6:] + \
                [{"role": "user", "content": pergunta}]
         t0 = time.time()
         try:
@@ -265,6 +267,7 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
 
     def _guardar(self, pergunta, resposta):
         self.historico += [{"role": "user", "content": pergunta}, {"role": "assistant", "content": resposta}]
+        self._hist_hora = time.time()
         self.historico = self.historico[-12:]
         mem = getattr(self.n, "memoria", None)
         if mem:

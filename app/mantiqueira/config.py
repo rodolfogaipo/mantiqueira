@@ -32,7 +32,7 @@ PADRAO = {
     "silencio_ate": 0,              # silêncio pedido na hora (timestamp)
     "avisar_cnp": True,             # confere o sistema de CNPs e avisa CNP novo / data prevista
     "cnp_intervalo_min": 15,
-    "versao_config": 2,
+    "versao_config": 3,
     "ignorar": [
         "banco", "bank", "senha", "password", "keepass", "bitwarden", "1password",
         "inprivate", "anônima", "anonima", "incognito", "nubank", "itaú", "itau",
@@ -60,6 +60,11 @@ class Config:
             if self.dados.get("atalho") == "ctrl+space":
                 self.dados["atalho"] = "ctrl+shift+space"
             self.dados["versao_config"] = 2
+        if self.dados.get("versao_config", 1) < 3:
+            # 1.4.7: versões antigas gravavam a voz rápida sem ele escolher (quando a natural ainda carregava)
+            if self.dados.get("voz") == "piper:faber":
+                self.dados["voz"] = ""
+            self.dados["versao_config"] = 3
         self.salvar()
 
     def __getitem__(self, k):

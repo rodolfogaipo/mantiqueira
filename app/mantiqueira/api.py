@@ -249,6 +249,10 @@ class Api:
                 novos["microfone"] = int(novos["microfone"])
             except (TypeError, ValueError):
                 novos["microfone"] = None
+        if "voz" in novos:
+            ids = [v["id"] for v in (n.voz.vozes() if n.voz else [])]
+            if not novos["voz"] or novos["voz"] not in ids:
+                novos.pop("voz")                        # lista ainda carregando: não troca a voz escolhida
         if "silencio_horarios" in novos:
             bruto = novos["silencio_horarios"]
             linhas = bruto.splitlines() if isinstance(bruto, str) else list(bruto or [])

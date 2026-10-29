@@ -117,7 +117,7 @@ JS_MAIS_POR_PAGINA = r"""
 JS_DIAG = r"""
 (function(){
   var o = {url: location.href, w: innerWidth, h: innerHeight, pronto: document.readyState, visivel: document.visibilityState};
-  o.tabelas = Array.prototype.map.call(document.querySelectorAll('table'), function(t){ return t.rows.length; });
+  o.tabelas = Array.prototype.map.call(document.querySelectorAll('table'), function(t){ return t.rows.length; }).slice(0, 8);
   o.tr = document.querySelectorAll('tr').length;
   o.matrow = document.querySelectorAll('mat-row, tr.mat-row, tr.mat-mdc-row, [role=row]').length;
   o.virtual = document.querySelectorAll('cdk-virtual-scroll-viewport').length;
@@ -190,6 +190,8 @@ class SistemasWeb:
         self.janela = None
         self.lock = threading.Lock()
         self.cache = {}            # nome → (hora, dados)
+        self._login_aberto = False
+        self.aviso_login = ""
         self.ultimos = {}          # nome → últimos dados lidos (para reconhecer produtos citados sem "CNP")
         self.precisa_login = set()
 
@@ -209,113 +211,107 @@ class SistemasWeb:
         return None
 
     # ------------------------------------------------------------------ janela
-    def _viva(self):
-        if self.janela is None:
-            return False
-        try:
-            self.janela.get_current_url()
-            return True
-        except Exception:
-            self.janela = None
-            return False
-
-    def _janela(self, url, visivel):
-        import webview
-        if not self._viva():
-            # nasce visível (minimizada quando é só para ler): janela criada escondida às vezes nem carrega a página
-            w = webview.create_window("Mantiqueira — sistema da empresa", url=url, width=1200, height=800,
-                                      minimized=not visivel)
-            self.janela = w
-
-            def ao_pedir_fechar():
-                if getattr(self.n, "saindo", False):
-                    return True
-                threading.Thread(target=self.esconder, daemon=True).start()   # o X só esconde: o login continua valendo
-                return False
-
-            def ao_fechar():
-                if self.janela is w:
-                    self.janela = None
-            w.events.closing += ao_pedir_fechar
-            w.events.closed += ao_fechar
-            fim = time.time() + 25
-            while time.time() < fim:
-                try:
-                    if w.get_current_url():
-                        break
-                except Exception:
-                    pass
-                time.sleep(0.5)
-            if not visivel:
-                time.sleep(2)
-                self.esconder()
+    # ------------------------------------------------------------------ navegador próprio (Edge/Chrome do Windows)
+    # O sistema é lido por um navegador separado, sem janela (modo "headless"), controlado pelo Playwright.
+    # O login é feito uma vez numa janela desse mesmo navegador e fica guardado no perfil dados/navegador_sistemas.
+    def _abrir_navegador(self, pw, sem_janela):
+        from . import paths
+        perfil = paths.DADOS / "navegador_sistemas"
+        perfil.mkdir(parents=True, exist_ok=True)
+        opcoes = dict(user_data_dir=str(perfil), headless=sem_janela, locale="pt-BR", ignore_https_errors=True,
+                      args=["--disable-features=Translate", "--no-first-run", "--no-default-browser-check"])
+        if sem_janela:
+            opcoes["viewport"] = {"width": 1600, "height": 2000}
         else:
+            opcoes["no_viewport"] = True
+            opcoes["args"] = opcoes["args"] + ["--start-maximized"]
+        erro = None
+        for canal in ("msedge", "chrome", None):
             try:
-                if (self.janela.get_current_url() or "").split("#")[0] != url:
-                    self.janela.load_url(url)
-            except Exception:
-                self.janela.load_url(url)
-            if visivel:
-                self.janela.show()
-        return self.janela
+                if canal is None:
+                    return pw.chromium.launch_persistent_context(**opcoes)
+                return pw.chromium.launch_persistent_context(channel=canal, **opcoes)
+            except Exception as e:
+                erro = e
+                log.info("navegador %s indisponível: %s", canal, str(e).splitlines()[0][:200])
+        raise RuntimeError(f"não encontrei o Edge nem o Chrome neste computador ({erro})")
+
+    def _avaliar(self, page, js, json_=True):
+        try:
+            r = page.evaluate(js)
+        except Exception as e:
+            log.info("script na página falhou: %s", str(e).splitlines()[0][:200])
+            return None
+        if not json_:
+            return r
+        try:
+            return json.loads(r) if isinstance(r, str) else r
+        except Exception:
+            return None
 
     def abrir_para_login(self, sistema):
-        with self.lock:
-            w = self._janela(sistema["url"], True)
-        try:
-            w.restore()
-            w.show()
-        except Exception:
-            pass
-        self.cache.pop(sistema["nome"], None)
+        """Abre uma janela do navegador no sistema para o usuário entrar. Fecha sozinha quando a lista aparece."""
+        if self._login_aberto:
+            return True
+        threading.Thread(target=self._login, args=(sistema,), daemon=True, name="login-sistema").start()
         return True
 
+    def _login(self, sistema):
+        from playwright.sync_api import sync_playwright
+        if not self.lock.acquire(timeout=120):
+            log.info("login: o navegador está ocupado lendo o sistema")
+            return
+        self._login_aberto = True
+        try:
+            with sync_playwright() as pw:
+                ctx = self._abrir_navegador(pw, sem_janela=False)
+                try:
+                    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+                    page.goto(sistema["url"], wait_until="domcontentloaded", timeout=30000)
+                    vista = 0
+                    fim = time.time() + 900                 # até 15 minutos para fazer o login
+                    while time.time() < fim:
+                        if page.is_closed() or not ctx.pages:
+                            break
+                        d = self._avaliar(page, JS_LER)
+                        if d and d.get("tabelas") and not d.get("login"):
+                            vista += 1
+                            if vista >= 3:                  # lista apareceu: login feito
+                                log.info("login no sistema %s confirmado", sistema["nome"])
+                                self.precisa_login.discard(sistema["nome"])
+                                self.cache.pop(sistema["nome"], None)
+                                self.aviso_login = f"Login no sistema de {sistema['nome']} feito. Pode me perguntar."
+                                try:
+                                    self.n.falar_aviso(f"Pronto, o login no sistema de {sistema['nome']} está feito. "
+                                                       f"Já pode me perguntar sobre os {sistema['nome']}.")
+                                except Exception:
+                                    pass
+                                time.sleep(1.5)
+                                break
+                        else:
+                            vista = 0
+                        time.sleep(1)
+                finally:
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+        except Exception:
+            log.exception("janela de login do sistema")
+        finally:
+            self._login_aberto = False
+            self.lock.release()
+
     def esconder(self):
-        if self.janela:
-            try:
-                self.janela.hide()
-            except Exception:
-                pass
+        pass                                             # o navegador de leitura não tem janela
 
-    # ------------------------------------------------------------------ leitura
-    def _preparar_leitura(self, w):
-        """Janela escondida/minimizada não desenha a tabela (o navegador economiza): para ler, ela fica aberta
-        e de tamanho normal, mas fora da área da tela."""
-        try:
-            w.restore()
-        except Exception:
-            pass
-        try:
-            w.move(-4000, 0)
-        except Exception:
-            pass
-        try:
-            w.resize(1400, 1600)
-        except Exception:
-            pass
-        try:
-            w.show()
-        except Exception:
-            pass
-
-    def _fim_leitura(self, w):
-        try:
-            w.hide()
-        except Exception:
-            pass
-        try:
-            w.move(120, 60)
-            w.resize(1200, 800)
-        except Exception:
-            pass
-
-    def _coletar(self, w, chaves, linhas, cab_ref):
+    def _coletar(self, page, chaves, linhas, cab_ref):
         """Lê a página atual inteira, rolando a tabela (tabelas que só desenham as linhas visíveis)."""
-        self._eval(w, JS_TOPO, json_=False)
+        self._avaliar(page, JS_TOPO, json_=False)
         time.sleep(0.4)
         ultimo = None
-        for _ in range(60):
-            d = self._eval(w, JS_LER)
+        for _ in range(80):
+            d = self._avaliar(page, JS_LER)
             if d and d["tabelas"]:
                 t = d["tabelas"][0]
                 if not cab_ref and t["cab"]:
@@ -326,7 +322,7 @@ class SistemasWeb:
                         chaves.add(k)
                         linhas.append(l)
                 ultimo = d
-            if not self._eval(w, JS_ROLAR, json_=False):
+            if not self._avaliar(page, JS_ROLAR, json_=False):
                 break
             time.sleep(0.5)
         return ultimo
@@ -336,75 +332,83 @@ class SistemasWeb:
         c = self.cache.get(nome)
         if c and time.time() - c[0] < cache_seg:
             return c[1]
-        with self.lock:
-            w = self._janela(sistema["url"], False)
-            self._preparar_leitura(w)
-            try:
+        if self._login_aberto:
+            raise RuntimeError("a janela de login ainda está aberta; termine o login e feche a janela")
+        if not self.lock.acquire(timeout=90):
+            raise RuntimeError("o sistema ainda está sendo lido; pergunte de novo em instantes")
+        try:
+            from playwright.sync_api import sync_playwright
+            inicio = time.time()
+            apis = []
+            with sync_playwright() as pw:
+                ctx = self._abrir_navegador(pw, sem_janela=True)
                 try:
-                    w.load_url(sistema["url"])              # começa sempre do zero (sem filtro/página de antes)
-                except Exception:
-                    pass
-                time.sleep(3)
-                dados = self._eval(w, JS_LER)
-                # a tela de login aparece por um instante enquanto o sistema confere a sessão: espera até 15 s
-                for _ in range(15):
-                    if dados and dados["tabelas"]:
-                        break
-                    time.sleep(1)
-                    dados = self._eval(w, JS_LER)
-                log.info("sistema %s: diagnóstico %s", nome, self._eval(w, JS_DIAG, json_=False))
-                if not dados:
-                    raise RuntimeError("a página não respondeu")
-                if dados["login"] and not dados["tabelas"]:
-                    self.precisa_login.add(nome)
-                    return {"login": True}
-                self.precisa_login.discard(nome)
-                if self._eval(w, JS_LIMPAR, json_=False):
-                    log.info("sistema %s: filtros limpos", nome)
-                    time.sleep(3)
-                if self._eval(w, JS_TAMANHO_ABRIR, json_=False):
-                    time.sleep(0.8)
-                    mx = self._eval(w, JS_TAMANHO_MAIOR, json_=False)
-                    log.info("sistema %s: registros por página → %s", nome, mx)
-                    time.sleep(3)
-                elif self._eval(w, JS_MAIS_POR_PAGINA, json_=False):
-                    time.sleep(2.5)
-                log.info("sistema %s: depois de preparar %s", nome, self._eval(w, JS_DIAG, json_=False))
-                cab, linhas, chaves = [], [], set()
-                ultimo = self._coletar(w, chaves, linhas, cab)
-                pag = 1
-                while ultimo and ultimo.get("proxima") and pag < max_paginas:
-                    antes = len(linhas)
-                    if not self._eval(w, JS_PROXIMA, json_=False):
-                        break
-                    time.sleep(1.8)
-                    ultimo = self._coletar(w, chaves, linhas, cab)
-                    if len(linhas) == antes:
-                        break                           # não mudou de página
-                    pag += 1
-            finally:
-                self._fim_leitura(w)
+                    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+                    page.set_default_timeout(20000)
+
+                    def resposta(r):
+                        try:
+                            if r.request.resource_type in ("xhr", "fetch") and len(apis) < 15:
+                                apis.append(f"{r.status} {r.request.method} {r.url[:160]}")
+                        except Exception:
+                            pass
+                    page.on("response", resposta)
+                    page.goto(sistema["url"], wait_until="domcontentloaded", timeout=30000)
+                    dados = None
+                    for _ in range(25):                   # espera a tabela (ou a tela de login) aparecer
+                        dados = self._avaliar(page, JS_LER)
+                        if dados and dados["tabelas"]:
+                            break
+                        time.sleep(1)
+                    log.info("sistema %s: diagnóstico %s", nome, self._avaliar(page, JS_DIAG, json_=False))
+                    if not dados:
+                        raise RuntimeError("a página não respondeu")
+                    if not dados["tabelas"]:
+                        if dados["login"]:
+                            self.precisa_login.add(nome)
+                            return {"login": True}
+                        raise RuntimeError("a página abriu, mas não mostrou a lista")
+                    self.precisa_login.discard(nome)
+                    if self._avaliar(page, JS_LIMPAR, json_=False):
+                        log.info("sistema %s: filtros limpos", nome)
+                        time.sleep(3)
+                    if self._avaliar(page, JS_TAMANHO_ABRIR, json_=False):
+                        time.sleep(0.8)
+                        mx = self._avaliar(page, JS_TAMANHO_MAIOR, json_=False)
+                        log.info("sistema %s: registros por página → %s", nome, mx)
+                        time.sleep(3)
+                    elif self._avaliar(page, JS_MAIS_POR_PAGINA, json_=False):
+                        time.sleep(2.5)
+                    log.info("sistema %s: depois de preparar %s", nome, self._avaliar(page, JS_DIAG, json_=False))
+                    cab, linhas, chaves = [], [], set()
+                    ultimo = self._coletar(page, chaves, linhas, cab)
+                    pag = 1
+                    while ultimo and ultimo.get("proxima") and pag < max_paginas and time.time() - inicio < 150:
+                        antes = len(linhas)
+                        if not self._avaliar(page, JS_PROXIMA, json_=False):
+                            break
+                        time.sleep(1.8)
+                        ultimo = self._coletar(page, chaves, linhas, cab)
+                        if len(linhas) == antes:
+                            break                       # não mudou de página
+                        pag += 1
+                finally:
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+            if apis:
+                log.info("sistema %s: chamadas da página: %s", nome, " ; ".join(apis))
             res = {"login": False, "cab": cab, "linhas": linhas, "paginas": pag, "hora": time.strftime("%H:%M")}
             self.cache[nome] = (time.time(), res)
             self.ultimos[nome] = res
-            log.info("sistema %s: %d linhas em %d páginas", nome, len(linhas), pag)
+            log.info("sistema %s: %d linhas em %d páginas (%.0f s)", nome, len(linhas), pag, time.time() - inicio)
             log.info("sistema %s: colunas %s", nome, " | ".join(cab))
             for l in linhas[:2]:
                 log.info("sistema %s: exemplo %s", nome, " | ".join(l)[:400])
             return res
-
-    def _eval(self, w, js, json_=True):
-        try:
-            r = w.evaluate_js(js)
-        except Exception:
-            log.debug("evaluate_js", exc_info=True)
-            return None
-        if not json_:
-            return r
-        try:
-            return json.loads(r) if isinstance(r, str) else r
-        except Exception:
-            return None
+        finally:
+            self.lock.release()
 
     # ------------------------------------------------------------------ teste (botão TESTAR)
     def testar(self, nome):

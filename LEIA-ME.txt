@@ -92,8 +92,9 @@ PERGUNTAS DE CNP
 - Não precisa dizer "CNP": "quando a banqueta Miches foi criada?",
   "qual a data prevista da poltrona Miches?", "quem criou o pedido 121861?".
   A resposta sai direto da tabela do sistema (a IA não inventa).
-- Ao consultar, a janela do sistema abre fora da tela por alguns segundos
-  (aparece na barra de tarefas) para a tabela carregar inteira.
+- O sistema é lido por um navegador próprio (Edge), sem janela nenhuma.
+  ENTRAR abre uma janela do Edge para o login; quando a lista aparece, ela
+  fecha sozinha e o login fica guardado.
 
 PLANILHAS
 - "quantos projetos a Máyra fez na semana de 23/08/2026": usa só a linha
