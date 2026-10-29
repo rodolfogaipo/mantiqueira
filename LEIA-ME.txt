@@ -88,6 +88,19 @@ O QUE EU FIZ / O QUE MUDOU
 - "o que eu abri hoje?" (ou ontem): lista os arquivos com horários.
 - "o que mudou na pasta Poltrona Brisa hoje?"
 
+PERGUNTAS DE CNP
+- Não precisa dizer "CNP": "quando a banqueta Miches foi criada?",
+  "qual a data prevista da poltrona Miches?", "quem criou o pedido 121861?".
+  A resposta sai direto da tabela do sistema (a IA não inventa).
+- Ao consultar, a janela do sistema abre fora da tela por alguns segundos
+  (aparece na barra de tarefas) para a tabela carregar inteira.
+
+PLANILHAS
+- "quantos projetos a Máyra fez na semana de 23/08/2026": usa só a linha
+  dessa data, na aba da pessoa citada. Embaixo aparece a FONTE.
+- "quem é o melhor/pior projetista?": calcula pela aba de resumo, se
+  houver, ou pela média de cada aba. O ranking completo aparece na tela.
+
 AVISO DE CNP
 - Com o login feito, a cada 15 minutos (das 6h às 20h) ele confere o
   sistema, só lendo, e avisa CNP novo e CNP com data prevista para hoje

@@ -469,6 +469,27 @@ def _():
     leitor.planilhas_abertas = lambda: {("CONTROLE_EQUIPE.xlsx", "Máyra"): {"linhas": lin, "lin0": 1, "col0": 1, "ativa": True}}
     t = "\n".join(leitor.trechos_planilhas("quantos projetos a mayra fez na semana de 23-08-2026"))
     assert "LINHA EXATA" in t and "Data=23/08/2026" in t and "Data=16/08/2026" not in t, t
+    sw.ultimos["CNPs"] = d
+    assert sw.citado_sem_nome("quando a banqueta miches foi criada?") is not None
+    assert sw.citado_sem_nome("quando o pedido 121861 foi criado") is not None
+    assert sw.citado_sem_nome("tudo bem com você?") is None
+    assert "28/10" in sw.responder(s, d, "quando a banqueta miches foi gerada?") or ontem[:5] in sw.responder(s, d, "quando a banqueta miches foi gerada?")
+
+    def aba(base):
+        lin = [["CONTROLE"], ["Semana", "Data", "Projetos", "Nota"]]
+        for k in range(1, 40):
+            lin.append([str(k), (dt.date(2026, 1, 4) + dt.timedelta(weeks=k - 1)).strftime("%d/%m/%Y"),
+                        str(base + k) if k < 36 else "-", str(base // 2 + k % 5) if k < 36 else "0,0"])
+        return lin
+    leitor.planilhas_abertas = lambda: {("CE.xlsx", "Máyra"): {"linhas": aba(100), "lin0": 1, "col0": 1, "ativa": True},
+                                        ("CE.xlsx", "Leandrinho"): {"linhas": aba(180), "lin0": 1, "col0": 1, "ativa": False},
+                                        ("CE.xlsx", "CADASTRO DE SERVIÇOS"): {"linhas": [["Serviço", "Nota"], ["a", "999"], ["b", "1"]],
+                                                                              "lin0": 1, "col0": 1, "ativa": False}}
+    rk = leitor.ranking_planilhas("quem é o melhor projetista?")
+    assert rk and "Leandrinho" in rk[0].split(".")[0], rk
+    rk2 = leitor.ranking_planilhas("quem é o pior projetista?")
+    assert rk2 and "Máyra" in rk2[0].split(".")[0], rk2
+    r += [rk[0], rk2[0]]
     print("::notice title=Respostas exatas::" + " %0A".join(x.replace("%", "%25") for x in r + [t.splitlines()[-1]])[:1500], flush=True)
 
 

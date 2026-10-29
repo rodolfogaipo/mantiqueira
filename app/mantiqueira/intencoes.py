@@ -91,7 +91,7 @@ class Intencoes:
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
         for f in (self.parar, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
-                  self.abrir_pedido, self.buscar, self.ler_janela):
+                  self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
                 r = f(p, pergunta)
             except Exception:
@@ -608,7 +608,7 @@ class Intencoes:
         sw = self.n.sistemas
         if not sw:
             return None
-        s = sw.qual(p)
+        s = sw.qual(p) or sw.citado_sem_nome(original)
         if not s:
             return None
         try:
@@ -631,6 +631,24 @@ class Intencoes:
             return exata                                # resposta tirada direto da tabela, sem a IA
         self.n.contexto_extra = sw.formatar(s, d, original)
         return None                                     # a IA responde usando os dados lidos
+
+    def ranking(self, p, original):
+        """'Quem é o melhor/pior projetista?' com o Excel aberto: conta direto da planilha."""
+        if not re.search(r"\b(melhor|pior|maior|menor|ranking)\b", p):
+            return None
+        if not re.search(r"projetista|funcionari|pessoa|quem|equipe|colaborador|planilha|semana|ano|mes|nota|media", p):
+            return None
+        from . import leitor
+        try:
+            r = leitor.ranking_planilhas(original)
+        except Exception:
+            log.exception("ranking da planilha")
+            return None
+        if not r:
+            return None
+        texto, detalhe = r
+        self.n.detalhe_texto = detalhe
+        return texto
 
     # ------------------------------------------------------------------ ler outra janela
     def ler_janela(self, p, original):

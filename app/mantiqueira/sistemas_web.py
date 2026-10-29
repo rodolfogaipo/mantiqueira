@@ -113,6 +113,74 @@ JS_MAIS_POR_PAGINA = r"""
 })()
 """
 
+# diagnóstico da página (vai para o log)
+JS_DIAG = r"""
+(function(){
+  var o = {url: location.href, w: innerWidth, h: innerHeight, pronto: document.readyState, visivel: document.visibilityState};
+  o.tabelas = Array.prototype.map.call(document.querySelectorAll('table'), function(t){ return t.rows.length; });
+  o.tr = document.querySelectorAll('tr').length;
+  o.matrow = document.querySelectorAll('mat-row, tr.mat-row, tr.mat-mdc-row, [role=row]').length;
+  o.virtual = document.querySelectorAll('cdk-virtual-scroll-viewport').length;
+  var pag = document.querySelector('.mat-paginator-range-label, .mat-mdc-paginator-range-label, .dataTables_info, .pagination-info');
+  o.paginador = pag ? (pag.innerText || '').trim() : '';
+  o.filtros = [];
+  document.querySelectorAll('input').forEach(function(i){ if (i.value && i.type !== 'password' && i.type !== 'hidden') o.filtros.push((i.placeholder || i.name || i.id || '?') + '=' + i.value); });
+  return JSON.stringify(o);
+})()
+"""
+
+# limpa os filtros da tela (botão "Limpar")
+JS_LIMPAR = r"""
+(function(){
+  var bs = document.querySelectorAll('button, a, [role=button]');
+  for (var i = 0; i < bs.length; i++){
+    var t = (bs[i].innerText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (/(^|\s)limpar( filtros)?$/.test(t) && bs[i].offsetParent !== null && !bs[i].disabled){ bs[i].click(); return true; }
+  }
+  return false;
+})()
+"""
+
+# abre o seletor "registros por página" (mat-select ou parecido) — depois JS_TAMANHO_MAIOR escolhe o maior
+JS_TAMANHO_ABRIR = r"""
+(function(){
+  var sels = document.querySelectorAll('mat-select, .mat-select, .mat-mdc-select, [role=combobox], [role=listbox]');
+  for (var i = 0; i < sels.length; i++){
+    var t = (sels[i].innerText || '').trim();
+    if (/^\d{1,3}$/.test(t) && sels[i].offsetParent !== null){ sels[i].click(); return t; }
+  }
+  return '';
+})()
+"""
+JS_TAMANHO_MAIOR = r"""
+(function(){
+  var ops = document.querySelectorAll('mat-option, .mat-option, .mat-mdc-option, [role=option]'), melhor = null, max = 0;
+  ops.forEach(function(o){ var n = parseInt((o.innerText || '').trim(), 10); if (n > max){ max = n; melhor = o; } });
+  if (melhor){ melhor.click(); return max; }
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  return 0;
+})()
+"""
+
+# rola a tabela (ou a página) um pouco para baixo; devolve true se andou
+JS_ROLAR = r"""
+(function(){
+  var t = document.querySelector('cdk-virtual-scroll-viewport') || document.querySelector('table');
+  var el = t;
+  while (el && el !== document.body){
+    var cs = getComputedStyle(el);
+    if (el.scrollHeight > el.clientHeight + 5 && /(auto|scroll)/.test(cs.overflowY)){
+      var antes = el.scrollTop; el.scrollTop = antes + el.clientHeight * 0.7; return el.scrollTop !== antes;
+    }
+    el = el.parentElement;
+  }
+  var y = window.scrollY; window.scrollBy(0, Math.max(300, innerHeight * 0.7));
+  var s = document.scrollingElement; if (s && window.scrollY === y){ var a = s.scrollTop; s.scrollTop = a + innerHeight * 0.7; return s.scrollTop !== a; }
+  return window.scrollY !== y;
+})()
+"""
+JS_TOPO = "(function(){window.scrollTo(0,0); var v=document.querySelector('cdk-virtual-scroll-viewport'); if(v) v.scrollTop=0; document.querySelectorAll('*').forEach(function(e){ if(e.scrollTop>0) e.scrollTop=0; }); return true;})()"
+
 JS_PROXIMA = "(function(){var b=document.querySelector('[data-mantiqueira-prox]'); if(b){b.removeAttribute('data-mantiqueira-prox'); b.click(); return true;} return false;})()"
 
 
@@ -122,6 +190,7 @@ class SistemasWeb:
         self.janela = None
         self.lock = threading.Lock()
         self.cache = {}            # nome → (hora, dados)
+        self.ultimos = {}          # nome → últimos dados lidos (para reconhecer produtos citados sem "CNP")
         self.precisa_login = set()
 
     def lista(self):
@@ -209,6 +278,59 @@ class SistemasWeb:
                 pass
 
     # ------------------------------------------------------------------ leitura
+    def _preparar_leitura(self, w):
+        """Janela escondida/minimizada não desenha a tabela (o navegador economiza): para ler, ela fica aberta
+        e de tamanho normal, mas fora da área da tela."""
+        try:
+            w.restore()
+        except Exception:
+            pass
+        try:
+            w.move(-4000, 0)
+        except Exception:
+            pass
+        try:
+            w.resize(1400, 1600)
+        except Exception:
+            pass
+        try:
+            w.show()
+        except Exception:
+            pass
+
+    def _fim_leitura(self, w):
+        try:
+            w.hide()
+        except Exception:
+            pass
+        try:
+            w.move(120, 60)
+            w.resize(1200, 800)
+        except Exception:
+            pass
+
+    def _coletar(self, w, chaves, linhas, cab_ref):
+        """Lê a página atual inteira, rolando a tabela (tabelas que só desenham as linhas visíveis)."""
+        self._eval(w, JS_TOPO, json_=False)
+        time.sleep(0.4)
+        ultimo = None
+        for _ in range(60):
+            d = self._eval(w, JS_LER)
+            if d and d["tabelas"]:
+                t = d["tabelas"][0]
+                if not cab_ref and t["cab"]:
+                    cab_ref.extend(t["cab"])
+                for l in t["linhas"]:
+                    k = " | ".join(l[:3])
+                    if k not in chaves:
+                        chaves.add(k)
+                        linhas.append(l)
+                ultimo = d
+            if not self._eval(w, JS_ROLAR, json_=False):
+                break
+            time.sleep(0.5)
+        return ultimo
+
     def ler(self, sistema, max_paginas=60, cache_seg=180):
         nome = sistema["nome"]
         c = self.cache.get(nome)
@@ -216,49 +338,55 @@ class SistemasWeb:
             return c[1]
         with self.lock:
             w = self._janela(sistema["url"], False)
-            time.sleep(3)
-            dados = self._eval(w, JS_LER)
-            # sistemas modernos mostram a tela de login por um instante enquanto conferem a sessão:
-            # só conclui "precisa de login" se continuar assim por uns 15 segundos
-            for _ in range(15):
-                if dados and dados["tabelas"]:
-                    break
-                time.sleep(1)
-                dados = self._eval(w, JS_LER)
-            log.info("sistema %s: endereço %s, tabelas=%s, login=%s", nome, (dados or {}).get("url"),
-                     len((dados or {}).get("tabelas") or []), (dados or {}).get("login"))
-            if not dados:
+            self._preparar_leitura(w)
+            try:
                 try:
-                    url_atual = w.get_current_url()
+                    w.load_url(sistema["url"])              # começa sempre do zero (sem filtro/página de antes)
                 except Exception:
-                    url_atual = None
-                log.info("sistema %s sem resposta; endereço atual: %s", nome, url_atual)
-                raise RuntimeError("a página não respondeu")
-            if dados["login"] and not dados["tabelas"]:
-                self.precisa_login.add(nome)
-                return {"login": True}
-            self.precisa_login.discard(nome)
-            if self._eval(w, JS_MAIS_POR_PAGINA, json_=False):
-                time.sleep(2.5)
-                dados = self._eval(w, JS_LER) or dados
-            cab = dados["tabelas"][0]["cab"] if dados["tabelas"] else []
-            linhas = [l for t in dados["tabelas"][:1] for l in t["linhas"]]
-            pag = 1
-            while dados.get("proxima") and pag < max_paginas:
-                if not self._eval(w, JS_PROXIMA, json_=False):
-                    break
-                time.sleep(1.6)
-                novo = self._eval(w, JS_LER)
-                if not novo or not novo["tabelas"]:
-                    break
-                novas = novo["tabelas"][0]["linhas"]
-                if novas and novas[0] in linhas:
-                    break                           # não mudou de página
-                linhas += novas
-                dados = novo
-                pag += 1
+                    pass
+                time.sleep(3)
+                dados = self._eval(w, JS_LER)
+                # a tela de login aparece por um instante enquanto o sistema confere a sessão: espera até 15 s
+                for _ in range(15):
+                    if dados and dados["tabelas"]:
+                        break
+                    time.sleep(1)
+                    dados = self._eval(w, JS_LER)
+                log.info("sistema %s: diagnóstico %s", nome, self._eval(w, JS_DIAG, json_=False))
+                if not dados:
+                    raise RuntimeError("a página não respondeu")
+                if dados["login"] and not dados["tabelas"]:
+                    self.precisa_login.add(nome)
+                    return {"login": True}
+                self.precisa_login.discard(nome)
+                if self._eval(w, JS_LIMPAR, json_=False):
+                    log.info("sistema %s: filtros limpos", nome)
+                    time.sleep(3)
+                if self._eval(w, JS_TAMANHO_ABRIR, json_=False):
+                    time.sleep(0.8)
+                    mx = self._eval(w, JS_TAMANHO_MAIOR, json_=False)
+                    log.info("sistema %s: registros por página → %s", nome, mx)
+                    time.sleep(3)
+                elif self._eval(w, JS_MAIS_POR_PAGINA, json_=False):
+                    time.sleep(2.5)
+                log.info("sistema %s: depois de preparar %s", nome, self._eval(w, JS_DIAG, json_=False))
+                cab, linhas, chaves = [], [], set()
+                ultimo = self._coletar(w, chaves, linhas, cab)
+                pag = 1
+                while ultimo and ultimo.get("proxima") and pag < max_paginas:
+                    antes = len(linhas)
+                    if not self._eval(w, JS_PROXIMA, json_=False):
+                        break
+                    time.sleep(1.8)
+                    ultimo = self._coletar(w, chaves, linhas, cab)
+                    if len(linhas) == antes:
+                        break                           # não mudou de página
+                    pag += 1
+            finally:
+                self._fim_leitura(w)
             res = {"login": False, "cab": cab, "linhas": linhas, "paginas": pag, "hora": time.strftime("%H:%M")}
             self.cache[nome] = (time.time(), res)
+            self.ultimos[nome] = res
             log.info("sistema %s: %d linhas em %d páginas", nome, len(linhas), pag)
             log.info("sistema %s: colunas %s", nome, " | ".join(cab))
             for l in linhas[:2]:
@@ -419,12 +547,44 @@ class SistemasWeb:
         ("setores", r"setor|setores|pendente|tubular|pintura|montagem|embalagem|atelie|engenharia"),
         ("status", r"status|situacao|como esta|andamento"),
         ("criado_por", r"quem criou|quem cadastrou|criado por|cadastrado por|quem fez"),
-        ("criacao", r"quando (foi )?(criad|cadastrad|entrou)|data de criacao|data da criacao|criado em|cadastrado em"),
+        ("criacao", r"quando (foi )?(criad|cadastrad|entrou|gerad|feit)|data de criacao|data da criacao|criad[oa] em|cadastrad[oa] em|"
+                    r"gerad[oa]|criad[oa]|cadastrad[oa]"),
         ("pedido", r"\bpedido\b"),
         ("qtd", r"quantas pecas|qtd|quantidade"),
         ("linha", r"\blinha\b"),
         ("carga", r"\bcarga\b"),
     ]
+
+    def citado_sem_nome(self, pergunta):
+        """Pergunta sobre um produto que está no sistema, sem dizer 'CNP' ('quando a banqueta miches foi criada?')."""
+        p = textutil.sem_acento(pergunta.lower())
+        if not re.search(r"criad|gerad|cadastrad|previs|prazo|entrega|aprova|pedido|setor|status|situacao|pronto|pronta|"
+                         r"quantas pecas|quem criou|andamento|data", p):
+            return None
+        palavras = [w for w in re.findall(r"[a-z0-9]{4,}", p) if w not in {"quando", "qual", "quais", "data", "pedido", "criado",
+                    "criada", "gerado", "gerada", "prevista", "previsto", "foi", "esta", "sistema", "status", "setor", "setores",
+                    "aprovacao", "gerencia", "pronto", "pronta", "entrega", "prazo", "cadastrado", "cadastrada", "dele", "dela"}]
+        if not palavras:
+            return None
+        for s in self.lista():
+            d = self.ultimos.get(s["nome"]) or (self.cache.get(s["nome"]) or (0, None))[1]
+            if not d or not d.get("linhas"):
+                continue
+            m = self._mapa(d["cab"])
+            i = m.get("produto")
+            if i is None:
+                continue
+            for l in d["linhas"]:
+                prod = textutil.sem_acento((l[i] if i < len(l) else "").lower())
+                if sum(1 for w in palavras if re.search(r"\b" + re.escape(w), prod)) >= min(2, len(palavras)):
+                    return s
+            if re.search(r"\bpedido\s*\d{4,}", p):
+                return s
+        # ainda sem dados guardados: perguntas típicas de CNP vão para o sistema de CNPs
+        if re.search(r"foi (criad|gerad|cadastrad)|data prevista|previsao de entrega|aprovacao da gerencia|quem criou|"
+                     r"status geral|setores? (da|do)", p):
+            return next((s for s in self.lista() if "cnp" in (s["url"] + s["nome"]).lower()), None)
+        return None
 
     def _mapa(self, cab):
         mapa = {}

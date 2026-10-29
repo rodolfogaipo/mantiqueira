@@ -260,6 +260,110 @@ def trechos_planilhas(pergunta, maximo=40):
     return saida
 
 
+def _num(c):
+    c = (c or "").strip().rstrip("%").strip()
+    if not c or c in ("-", "—"):
+        return None
+    if re.fullmatch(r"-?\d{1,3}(\.\d{3})+(,\d+)?|-?\d+(,\d+)?", c):
+        return float(c.replace(".", "").replace(",", "."))
+    if re.fullmatch(r"-?\d+\.\d+", c):
+        return float(c)
+    return None
+
+
+METRICAS = [("nota", ("nota",)), ("media", ("media", "média")), ("eficiencia", ("eficiencia", "eficiência")),
+            ("projetos", ("projeto",)), ("pontos", ("ponto",)), ("producao", ("producao", "produção"))]
+
+
+def ranking_planilhas(pergunta):
+    """'Quem é o melhor/pior projetista?' — calcula direto das planilhas abertas (sem a IA).
+    Devolve (texto, detalhe) ou None se a pergunta não for de ranking ou a planilha não permitir."""
+    p = textutil.sem_acento(pergunta.lower())
+    if not re.search(r"\b(melhor|pior|maior|menor|ranking|mais|menos|primeiro lugar|ultimo lugar)\b", p):
+        return None
+    dados = planilhas_abertas()
+    if not dados:
+        return None
+    pior = bool(re.search(r"\b(pior|menor|menos|ultimo lugar)\b", p))
+    # qual medida: a que ele citou; senão nota > média > eficiência > projetos
+    pedidas = [k for k, ws in METRICAS if any(textutil.sem_acento(w) in p for w in ws)]
+    ordem_m = pedidas + [k for k, _ in METRICAS if k not in pedidas]
+    datas = _datas_da_pergunta(p)
+    ativa = next((k for k, d in dados.items() if d.get("ativa")), None)
+    livro = ativa[0] if ativa else next(iter(dados))[0]
+    abas = {k: d for k, d in dados.items() if k[0] == livro}
+
+    def coluna(cab, chave):
+        palavras = dict(METRICAS)[chave]
+        for i, c in enumerate(cab):
+            cn = textutil.sem_acento((c or "").lower())
+            if any(textutil.sem_acento(w) in cn for w in palavras):
+                return i
+        return None
+    # 1) uma aba de resumo com nomes e notas
+    if not datas:
+        for (wb, aba), d in abas.items():
+            if not re.search(r"resumo|geral|ranking|anual|total", textutil.sem_acento(aba.lower())):
+                continue
+            linhas = d["linhas"]
+            h = _cabecalho(linhas)
+            cab, corpo = linhas[h], linhas[h + 1:]
+            for chave in ordem_m:
+                ci = coluna(cab, chave)
+                if ci is None:
+                    continue
+                ni = next((i for i in range(len(cab)) if i != ci and sum(1 for r in corpo if i < len(r) and r[i]
+                           and _num(r[i]) is None) >= max(2, len(corpo) // 2)), None)
+                if ni is None:
+                    continue
+                vals = [(r[ni], _num(r[ci])) for r in corpo if ni < len(r) and ci < len(r) and r[ni] and _num(r[ci]) is not None]
+                vals = [v for v in vals if not re.search(r"total|media|soma", textutil.sem_acento(v[0].lower()))]
+                if len(vals) < 2:
+                    continue
+                vals.sort(key=lambda x: x[1], reverse=not pior)
+                quem, val = vals[0]
+                det = [f"FONTE: {wb} — aba {aba}, coluna {cab[ci]}"] + [f"{i + 1}º {n}: {_txt(v)}" for i, (n, v) in enumerate(vals)]
+                return (f"Pela aba {aba}, o {'pior' if pior else 'melhor'} é {quem}, com {cab[ci]} {_txt(val)}. "
+                        f"{'O melhor' if pior else 'O pior'} é {vals[-1][0]}, com {_txt(vals[-1][1])}.", "\n".join(det))
+    # 2) uma aba por pessoa: média da medida em cada aba (semanas vazias ou zeradas não contam)
+    for chave in ordem_m:
+        res = []
+        nome_col = None
+        for (wb, aba), d in abas.items():
+            if re.search(r"cadastro|plano|config|resumo|geral|servic|lista|base|dados|ranking|total|anual|modelo",
+                         textutil.sem_acento(aba.lower())):
+                continue                            # abas que não são de uma pessoa
+            linhas = d["linhas"]
+            h = _cabecalho(linhas)
+            cab, corpo = linhas[h], linhas[h + 1:]
+            ci = coluna(cab, chave)
+            if ci is None:
+                continue
+            nome_col = cab[ci]
+            if datas:
+                alvo = [r for r in corpo if any(c.startswith(dt_) for c in r for dt_ in datas)]
+                v = _num(alvo[0][ci]) if alvo and ci < len(alvo[0]) else None
+                if v is not None:
+                    res.append((aba, v, 1))
+            else:
+                nums = [x for x in (_num(r[ci]) for r in corpo if ci < len(r)) if x]
+                if nums:
+                    res.append((aba, sum(nums) / len(nums), len(nums)))
+        if len(res) >= 2:
+            res.sort(key=lambda x: x[1], reverse=not pior)
+            quem, val, n = res[0]
+            if datas:
+                base = f"na semana de {datas[0].rstrip('/')}"
+            else:
+                base = "pela média das semanas preenchidas"
+            det = [f"FONTE: {livro} — coluna {nome_col}, {base} (semanas vazias ou zeradas não contam)"] + \
+                  [f"{i + 1}º {a}: {_txt(round(v, 2))}" + ("" if datas else f" ({k} semanas)") for i, (a, v, k) in enumerate(res)]
+            return (f"{'O pior' if pior else 'O melhor'} {base} é {quem}, com {nome_col} {_txt(round(val, 2))}. "
+                    f"{'O melhor' if pior else 'O pior'} é {res[-1][0]}, com {_txt(round(res[-1][1], 2))}. "
+                    f"O ranking completo está na tela.", "\n".join(det))
+    return None
+
+
 # ---------------------------------------------------------------------- Word
 def documentos_word():
     def ler():
