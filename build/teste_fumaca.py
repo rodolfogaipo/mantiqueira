@@ -515,6 +515,88 @@ def _():
     print(f"::notice title=Navegador do sistema::{len(d['linhas'])} CNPs em {d['paginas']} páginas, {time.time() - t0:.0f}s — {r}", flush=True)
 
 
+@etapa("agenda: pedidos em várias formas viram lembretes certos")
+def _():
+    import datetime as dt
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.cerebro import Cerebro
+
+    class IAFalsa:
+        pronta = True
+
+        def conversar(self, msgs, esquema, max_tokens=0):
+            return {"resposta": "(IA)", "acao": "nenhuma"}
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_agenda.db"); n.ia = IAFalsa(); n.olhos = None; n.latencia = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.mostrar_mini_seguro = lambda *a, **k: None
+    n.db.x("DELETE FROM lembretes")
+    c = Cerebro(n)
+    casos = [("coloca na agenda reunião com a equipe amanhã às 10", "Reunião com a equipe", 1, 10, 0),
+             ("me lembra de ligar pro fornecedor", None, None, None, None),
+             ("amanhã às 9", "Ligar pro fornecedor", 1, 9, 0),
+             ("agenda pra mim dentista amanhã 15h", "Dentista", 1, 15, 0),
+             ("me lembra amanhã às 7:15 de ir à marcenaria", "Ir à marcenaria", 1, 7, 15),
+             ("não deixa eu esquecer de pagar o boleto amanhã às 8", "Pagar o boleto", 1, 8, 0),
+             ("preciso que você me lembre de mandar o orçamento amanhã 16h", "Mandar o orçamento", 1, 16, 0)]
+    relato = []
+    for frase, texto, dias, h, mi in casos:
+        r = c.processar(frase)
+        relato.append(f"{frase} → {r}")
+        if texto:
+            l = [x for x in n.db.lembretes_proximos(50) if x["texto"] == texto]
+            assert l, (frase, r, [x["texto"] for x in n.db.lembretes_proximos(50)])
+            q = dt.datetime.fromisoformat(l[0]["quando"].replace(" ", "T"))
+            assert q.date() == dt.date.today() + dt.timedelta(days=dias) and (q.hour, q.minute) == (h, mi), (frase, q)
+        else:
+            assert "Para quando" in r, r
+    r = c.processar("o que tenho pra amanhã?")
+    assert "Reunião com a equipe" in r and "Dentista" in r, r
+    print("::notice title=Agenda::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
+
+
+@etapa("CNP: continuar o assunto ('e da poltrona?', 'e o pedido dela?')")
+def _():
+    import datetime as dt
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.sistemas_web import SistemasWeb
+    from mantiqueira.intencoes import Intencoes
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_cnp_conv.db"); n.detalhe_texto = ""; n.contexto_extra = ""
+    n.indice = None; n.olhos = None; n.memoria = None; n.frases = None; n.parar_fala = lambda: None; n.cerebro = None
+    n.ultima = {}; n.voz = None; n.em_silencio = lambda: False
+    cab = ["ID", "Produto", "Pedido", "Linha", "Carga", "Qtd Peças", "Data Prevista", "Aprovação Gerência", "Setores",
+           "Status Geral", "Criado por", "Data Criação", "Ações"]
+    d = {"login": False, "cab": cab, "hora": "16:00", "paginas": 1, "linhas": [
+        ["952", "banqueta miches Similar: banqueta pora", "121861", "banqueta", "-", "6", "07/12/2026", "28/10/2026 15:06",
+         "TUBULAR: pendente", "em análise pcp", "Ana Laura Alves Ribeiro", "28/10/2026 14:56", ""],
+        ["943", "SOFÁ ARGENTINA Similar: SOFÁ ARGENTINA", "121595", "ARGENTINA", "-", "1", "-", "26/10/2026 13:01",
+         "TUBULAR: pendente", "em análise pcp", "Laura Vitória Porto Martins", "23/10/2026 09:25", ""]]}
+    n.sistemas = sw = SistemasWeb(n)
+    sw.ler = lambda s, cache_seg=180: d
+    sw.ultimos["CNPs"] = d
+    it = Intencoes(n)
+    r1 = it.tratar("qual a data prevista da banqueta miches?", [])
+    r2 = it.tratar("e do sofá argentina?", [])
+    r3 = it.tratar("e o pedido dela?", [])
+    r4 = it.tratar("quem criou?", [])
+    r5 = it.tratar("quando o sofá argentina foi criado?", [])
+    assert "07/12/2026" in r1 and "ARGENTINA" in r2 and "121595" in r3 and "Laura Vitória" in r4 and "23/10/2026" in r5, \
+        (r1, r2, r3, r4, r5)
+    outra = it.tratar("qual o melhor projetista?", [])
+    assert not outra or "CNP" not in outra, outra
+    print("::notice title=CNP conversa::" + " %0A".join([r1, r2, r3, r4, r5]), flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

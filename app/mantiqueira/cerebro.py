@@ -38,7 +38,21 @@ class Cerebro:
         self.n = nucleo
         self.historico = []   # [{"role","content"}]
         self.lembrete_pendente = None
-        self._hist_hora = 0   # conversa nova a cada abertura; o histórico antigo fica só no HISTÓRICO da tela
+        self._hist_hora = 0
+        # continua o assunto de antes se a última conversa foi há menos de 1 hora (só pares pergunta → resposta)
+        try:
+            ult = self.n.db.conversa_ultimas(12)
+            agora_ = agora()
+            pares = []
+            for a_, b_ in zip(ult, ult[1:]):
+                if a_["papel"] == "usuario" and b_["papel"] == "assistente" and \
+                        (agora_ - parse_dt(b_["quando"])).total_seconds() < 3600:
+                    pares += [{"role": "user", "content": a_["texto"]}, {"role": "assistant", "content": b_["texto"]}]
+            self.historico = pares[-6:]
+            if pares:
+                self._hist_hora = time.time()
+        except Exception:
+            log.exception("histórico")
 
     # ------------------------------------------------------------------ contexto
     def _contexto(self, pergunta):
@@ -183,6 +197,9 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
         trat = n.cfg["tratamento"]
 
         # resposta a "Para quando?" de um lembrete pendente
+        if self.lembrete_pendente and textutil.pede_lembrete(pergunta) and \
+                len(textutil.texto_do_lembrete(pergunta).split()) >= 2:
+            self.lembrete_pendente = None               # é um pedido novo completo, não a resposta do "para quando?"
         if self.lembrete_pendente:
             pend, self.lembrete_pendente = self.lembrete_pendente, None
             quando = textutil.parse_quando("", agora(), pergunta) if textutil.tem_tempo(pergunta) else None
@@ -191,6 +208,23 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 self._guardar(pergunta, resp)
                 return resp
 
+        # agenda: criar e consultar sem depender da IA (para nunca deixar de anotar)
+        if textutil.consulta_agenda(pergunta):
+            resp = self._ler_agenda(pergunta)
+            self._guardar(pergunta, resp)
+            return resp
+        if textutil.pede_lembrete(pergunta):
+            texto = textutil.texto_do_lembrete(pergunta)
+            quando = textutil.parse_quando("", agora(), pergunta) if textutil.tem_tempo(pergunta) else None
+            if quando and quando >= agora() - dt.timedelta(minutes=1):
+                resp = self._criar_lembrete(texto, quando, pergunta)
+            else:
+                self.lembrete_pendente = {"texto": texto, "pergunta": pergunta, "t": time.time()}
+                resp = f"Claro, {trat}. Para quando devo marcar \"{texto[:1].lower() + texto[1:]}\"? Diga o dia e a hora."
+            log.info("agenda: %s", resp)
+            self._guardar(pergunta, resp)
+            return resp
+
         intents = getattr(n, "intencoes", None)
         if intents:
             direto = intents.tratar(pergunta, self.historico)
@@ -198,8 +232,8 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 self._guardar(pergunta, direto)
                 return direto
 
-        if time.time() - self._hist_hora > 900:
-            self.historico = []                          # mais de 15 minutos sem conversar: assunto novo
+        if time.time() - self._hist_hora > 3600:
+            self.historico = []                          # mais de 1 hora sem conversar: assunto novo
         msgs = [{"role": "system", "content": self._sistema(pergunta)}] + self.historico[-6:] + \
                [{"role": "user", "content": pergunta}]
         t0 = time.time()
@@ -266,6 +300,7 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
         return resposta
 
     def _guardar(self, pergunta, resposta):
+        log.info("PERGUNTA: %s → RESPOSTA: %s", pergunta[:300], (resposta or "")[:300])
         self.historico += [{"role": "user", "content": pergunta}, {"role": "assistant", "content": resposta}]
         self._hist_hora = time.time()
         self.historico = self.historico[-12:]
@@ -293,6 +328,33 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
         except Exception:
             log.exception("conversa simples")
             return ""
+
+    def _ler_agenda(self, pergunta):
+        db, trat = self.n.db, self.n.cfg["tratamento"]
+        p = textutil.sem_acento(pergunta.lower())
+        hoje = dt.date.today()
+        lista = db.lembretes_proximos(30)
+        if "amanha" in p:
+            lista = [l for l in lista if parse_dt(l["quando"]).date() == hoje + dt.timedelta(days=1)]
+            quando = "amanhã"
+        elif "hoje" in p:
+            lista = [l for l in lista if parse_dt(l["quando"]).date() == hoje]
+            quando = "hoje"
+        else:
+            quando = ""
+        if not lista:
+            return f"Não há nada marcado{(' para ' + quando) if quando else ' na agenda'}, {trat}."
+
+        def fala(l):
+            q = parse_dt(l["quando"])
+            d = "hoje" if q.date() == hoje else ("amanhã" if q.date() == hoje + dt.timedelta(days=1) else
+                                                   f"{textutil.DIAS_SEMANA[q.weekday()]}, {q:%d/%m}")
+            h = f"{q.hour}h" if q.minute == 0 else f"{q.hour}:{q:%M}"
+            return f"{d} às {h}, {l['texto']}"
+        self.n.detalhe_texto = "\n".join(fala(l) for l in lista)
+        if len(lista) == 1:
+            return f"Há um compromisso{(' ' + quando) if quando else ''}: {fala(lista[0])}."
+        return f"Há {len(lista)} compromissos{(' ' + quando) if quando else ''}. " + "; ".join(fala(l) for l in lista[:5]) + "."
 
     def _criar_lembrete(self, texto, quando, frase_usuario):
         repetir = textutil.repeticao(frase_usuario)

@@ -623,7 +623,8 @@ class SistemasWeb:
 
         def v(l, k):
             i = m.get(k)
-            return (l[i].strip() if i is not None and i < len(l) else "")
+            x = (l[i].strip() if i is not None and i < len(l) else "")
+            return "" if x in ("-", "—") else x
 
         def nome(l):
             prod = v(l, "produto")

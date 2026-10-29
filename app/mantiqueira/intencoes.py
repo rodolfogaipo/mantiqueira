@@ -610,8 +610,40 @@ class Intencoes:
         if not sw:
             return None
         s = sw.qual(p) or sw.citado_sem_nome(original)
+        pergunta_sistema = original
+        u = getattr(self, "ultimo_cnp", None)
+        if not s and u and time.time() - u["t"] < 600 and len(p.split()) <= 9 and \
+                not re.search(r"planilha|excel|projetista|semana|arquivo|pdf|pasta|lembr|agenda|abre|procur|solid|tela", p):
+            campo_aqui = any(re.search(rx, p) for _, rx in sw.PERGUNTA_CAMPO)
+            if re.match(r"^e (o|a|os|as|do|da|no|na|quanto|qual|quando|quem|pra|para|ela|ele)?\b", p) or \
+                    re.search(r"\b(dela|dele|desse|dessa)\b", p) or campo_aqui:
+                s = u["s"]                              # continuação do assunto: "e a poltrona?", "e o pedido dela?"
         if not s:
             return None
+        if u and u["s"] is s and time.time() - u["t"] < 600:
+            # completa a pergunta curta com o que faltou da anterior (o produto ou o que ele queria saber)
+            tem_campo = any(re.search(rx, p) for _, rx in sw.PERGUNTA_CAMPO)
+            d_cache = sw.ultimos.get(s["nome"]) or {}
+            m = sw._mapa(d_cache.get("cab") or []) if d_cache else {}
+            i = m.get("produto")
+            palavras = [w for w in re.findall(r"[a-z0-9]{4,}", p)]
+            tem_produto = bool(i is not None and any(
+                any(re.search(r"\b" + re.escape(w), textutil.sem_acento((l[i] if i < len(l) else "").lower())) for w in palavras)
+                for l in d_cache.get("linhas", [])))
+            if not tem_campo and u.get("campo_txt"):
+                pergunta_sistema += " " + u["campo_txt"]
+            if not tem_produto and re.search(r"\b(dela|dele|ela|ele|desse|dessa|mesmo|mesma|isso)\b|^e (o|a) (pedido|data|status|setores?|"
+                                              r"quantidade|linha|carga)\b|^(qual|quando|quem|quantas)\b", p) and u.get("produto_txt"):
+                pergunta_sistema += " " + u["produto_txt"]
+        campo_txt = next((re.search(rx, p).group(0) for _, rx in sw.PERGUNTA_CAMPO if re.search(rx, p)), "")
+        ps = textutil.sem_acento(pergunta_sistema.lower())
+        produto_txt = re.sub(r"\s+", " ", re.sub(r"\b(qual|quais|quando|quem|data|prevista|previsto|o|a|os|as|de|da|do|no|na|e|"
+                                                  r"cnp|cnps|sistema|origus|foi|criad[oa]|gerad[oa]|pedido|status|setores?|"
+                                                  r"tem|esta|dela|dele|ela|ele|mantiqueira)\b|[?!.,]", " ", ps)).strip()
+        self.ultimo_cnp = {"s": s, "t": time.time(),
+                           "campo_txt": campo_txt or (u.get("campo_txt", "") if u else ""),
+                           "produto_txt": produto_txt or (u.get("produto_txt", "") if u else "")}
+        original = pergunta_sistema
         c = sw.cache.get(s["nome"])
         if not (c and time.time() - c[0] < 180):
             # leitura demora alguns segundos: avisa para ele não ficar sem resposta
