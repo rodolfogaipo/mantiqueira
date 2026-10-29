@@ -135,6 +135,24 @@ class Indice:
                 out.append((raiz, origem, ""))
         return out
 
+    def avisos(self):
+        """Avisos para o painel (guardados por 1 minuto)."""
+        c = getattr(self, "_avisos_cache", None)
+        if c and time.time() - c[0] < 60:
+            return c[1]
+        out = []
+        try:
+            for raiz, origem, apel in self.locais():
+                if origem != "rede" or raiz == self.varrendo:
+                    continue
+                v = self.q("SELECT fim FROM varreduras WHERE raiz=?", (raiz,))
+                if not v or time.time() - (v[0]["fim"] or 0) > 26 * 3600:
+                    out.append(f"Mapa da rede {raiz[:2]} {apel} desatualizado: CONHECIMENTO > ATUALIZAR AGORA.".replace("  ", " "))
+        except Exception:
+            pass
+        self._avisos_cache = (time.time(), out)
+        return out
+
     def atualizar_agora(self):
         """Pedido da tela: refaz o mapa de tudo no próximo ciclo (sem esperar as 6/12 horas)."""
         with self.lock:

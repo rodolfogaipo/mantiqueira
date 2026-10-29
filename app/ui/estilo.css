@@ -161,3 +161,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .pisca{animation:pisca 1s step-end infinite}
 .rapido .a2{animation-duration:6s}.rapido .a3{animation-duration:2.5s}.rapido .swp{animation-duration:1.4s}.rapido .respira{animation-duration:.9s}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+.avisos{display:flex;flex-direction:column;gap:4px;align-items:center;pointer-events:none;z-index:5}
+.avisos div{font-family:var(--f-mono);font-size:11px;letter-spacing:1px;color:var(--al);border:1px solid rgba(var(--agl),.5);background:linear-gradient(rgba(var(--agl),.10),rgba(var(--agl),.10)),var(--bg2);padding:4px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini{font-family:var(--f-mono);font-size:10px;letter-spacing:1px;color:var(--mu)}
+.linha input[type=range]{flex:1;min-width:80px;accent-color:var(--p)}
+.sisres{display:block;margin:4px 0;color:var(--hi);min-height:14px}
+.apel{display:flex;gap:6px;align-items:center;font-size:12px}.apel span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

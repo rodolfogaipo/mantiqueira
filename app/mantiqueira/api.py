@@ -145,6 +145,26 @@ class Api:
                 return True
         return False
 
+    def sistema_testar(self, nome):
+        sw = self._n.sistemas
+        if not sw:
+            return "O Mantiqueira ainda está iniciando."
+        try:
+            return sw.testar(nome)
+        except Exception as e:
+            log.exception("testar sistema")
+            return f"Erro: {e}"
+
+    def apelidos_lista(self):
+        try:
+            return self._n.db.q("SELECT apelido, caminho FROM apelidos ORDER BY apelido")
+        except Exception:
+            return []
+
+    def apelido_apagar(self, apelido):
+        self._n.db.x("DELETE FROM apelidos WHERE apelido=?", (apelido,))
+        return True
+
     def indice_resumo(self):
         return self._n.indice.resumo() if self._n.indice else {}
 
@@ -229,6 +249,22 @@ class Api:
                 novos["microfone"] = int(novos["microfone"])
             except (TypeError, ValueError):
                 novos["microfone"] = None
+        if "silencio_horarios" in novos:
+            bruto = novos["silencio_horarios"]
+            linhas = bruto.splitlines() if isinstance(bruto, str) else list(bruto or [])
+            ok = []
+            import re as _re
+            for l in linhas:
+                m = _re.fullmatch(r"\s*(\d{1,2})[:h]?(\d{2})?\s*(?:-|a|até|ate)\s*(\d{1,2})[:h]?(\d{2})?\s*", l.strip())
+                if m:
+                    ok.append(f"{int(m.group(1)):02d}:{int(m.group(2) or 0):02d}-{int(m.group(3)):02d}:{int(m.group(4) or 0):02d}")
+            novos["silencio_horarios"] = ok
+        for k, lo, hi in (("voz_volume", 0.15, 1.8), ("voz_velocidade", 0.75, 1.35)):
+            if k in novos:
+                try:
+                    novos[k] = max(lo, min(hi, float(novos[k])))
+                except (TypeError, ValueError):
+                    novos.pop(k)
         if "sistemas_web" in novos:
             novos["sistemas_web"] = [{"nome": str(x.get("nome", "")).strip(), "url": str(x.get("url", "")).strip(),
                                       "palavras": str(x.get("palavras", "")).strip()} for x in novos["sistemas_web"] or []

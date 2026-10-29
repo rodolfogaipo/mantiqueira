@@ -24,6 +24,14 @@ PADRAO = {
     "x_esconde": True,              # o X da janela esconde em vez de fechar
     "sistemas_web": [{"nome": "CNPs", "url": "http://192.168.1.96:8080/cnp/cnps",
                       "palavras": "cnp cnps"}],
+    "som_lembrete": True,           # sinal sonoro antes de avisar um lembrete
+    "som_bip": True,                # bip quando é chamado para ouvir
+    "voz_volume": 1.0,              # 0.15 a 1.8
+    "voz_velocidade": 1.0,          # 0.75 a 1.35
+    "silencio_horarios": [],        # ["12:00-13:00", ...] todos os dias: só mostra na tela, não fala
+    "silencio_ate": 0,              # silêncio pedido na hora (timestamp)
+    "avisar_cnp": True,             # confere o sistema de CNPs e avisa CNP novo / data prevista
+    "cnp_intervalo_min": 15,
     "versao_config": 2,
     "ignorar": [
         "banco", "bank", "senha", "password", "keepass", "bitwarden", "1password",

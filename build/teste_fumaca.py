@@ -300,6 +300,77 @@ def _():
 
 
 
+@etapa("sons, voz, silêncio, apelidos e aviso de CNP")
+def _():
+    import datetime as dt
+    import shutil
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.indice import Indice, NOMES
+    from mantiqueira.memoria import Memoria
+    from mantiqueira.frases import Frases
+    from mantiqueira.intencoes import Intencoes
+    from mantiqueira.sistemas_web import SistemasWeb
+    import mantiqueira.intencoes as I
+    abertos = []
+    I.os.startfile = lambda c: abertos.append(c)
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_142.db"); n.olhos = None; n.sistemas = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.parar_fala = lambda: None; n.cerebro = None; n.ultima_fala = "Teste."
+    n.liberar_silenciados = lambda: None
+    n.indice = Indice(n); n.memoria = Memoria(n); n.frases = Frases(n.db)
+    base = paths.DADOS / "teste_142"
+    shutil.rmtree(base, ignore_errors=True)
+    (base / "Projetos" / "Poltrona Brisa").mkdir(parents=True)
+    (base / "Projetos" / "Poltrona Brisa" / "Brisa.SLDASM").write_bytes(b"x")
+    n.indice.varrer(str(base), "rede")
+    n.indice.con.execute("UPDATE arq SET raiz=? WHERE raiz=?", ("Q:\\", str(base)))
+    n.indice.con.commit()
+    NOMES.update({"Q:\\": "File-Teste"})
+    n.indice.locais = lambda: [("C:\\", "pc", ""), ("Q:\\", "rede", "File-Teste")]
+    it = Intencoes(n)
+    relato = []
+
+    def t(fr):
+        abertos.clear()
+        r = it.tratar(fr, [])
+        relato.append(f"{fr} → {r}")
+        return r
+    assert t("repete") == "Teste."
+    t("desliga o bip"); assert n.cfg["som_bip"] is False and n.cfg["som_lembrete"] is True
+    t("tira o som do aviso"); assert n.cfg["som_lembrete"] is False
+    t("liga o bip"); t("liga o sinal do lembrete"); assert n.cfg["som_bip"] and n.cfg["som_lembrete"]
+    t("fala mais baixo"); assert n.cfg["voz_volume"] < 1
+    t("volume normal"); assert n.cfg["voz_volume"] == 1
+    t("modo silencioso por 30 minutos"); assert 25 * 60 < n.cfg["silencio_ate"] - time.time() < 35 * 60
+    t("pode falar"); assert n.cfg["silencio_ate"] == 0
+    t("quando eu falar pasta da brisa, abre a pasta poltrona brisa no file teste")
+    t("abre a pasta da brisa"); assert abertos and abertos[0].endswith("Poltrona Brisa"), abertos
+    assert "mudou" in t("o que mudou na pasta poltrona brisa hoje")
+    t("apaga o apelido pasta da brisa")
+    falas = []
+    n.falar_aviso = falas.append
+    for r in n.db.q("SELECT chave FROM kv WHERE chave LIKE 'cnp%'"):
+        n.db.x("DELETE FROM kv WHERE chave=?", (r["chave"],))
+    sw = SistemasWeb(n)
+    am = (dt.date.today() + dt.timedelta(days=1)).strftime("%d/%m/%Y")
+    dados = {"login": False, "cab": ["ID", "Produto", "Pedido", "Data Prevista"], "paginas": 1, "hora": "10:00",
+             "linhas": [["101", "Mesa Luna", "5501", "10/11/2030"]]}
+    sw.ler = lambda s, cache_seg=180: dados
+    s = sw.lista()[0]
+    sw._conferir(s); assert not falas
+    dados["linhas"].append(["102", "Banqueta Miches", "5502", am])
+    sw._conferir(s); sw._conferir(s)
+    assert len(falas) == 2 and "Banqueta" in falas[0] and "amanhã" in falas[1], falas
+    relato += falas
+    print("\n".join(relato), flush=True)
+    print("::notice title=Novidades 1.4.2::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

@@ -55,12 +55,12 @@ var EXEMPLO = {
       pendencias:[{id:1,texto:'POLTRONA BALANÇO BRISA.sldasm ficou com alterações não salvas desde as 16:42. Arquivo com nome bem comprido para testar a quebra de linha da caixa (exemplo)',arquivo:'POLTRONA BALANÇO BRISA.sldasm'}],
       registro:[{hora:'08:12',app:'SolidWorks',nome:'Pergola_Lamelas_v3.SLDASM'},{hora:'07:58',app:'Excel',nome:'Orcamento_Cliente.xlsx'},{hora:'07:41',app:'Explorador',nome:'Projetos'}],
       ultima:{usuario:'procura no computador mesa luna oval',assistente:'Achei: Mesa Luna Oval 2,80X1,20.SLDASM, na pasta Projetos do Z:. Quer que eu abra?',detalhe:'1. Z:\\Projetos\\Mesas\\Mesa Luna Oval 2,80X1,20.SLDASM\n2. C:\\Users\\Rodolfo\\Desktop\\Mesa Luna Oval.pdf'},
-      alerta:null, aviso_gravacao:'', erros:[], holo:{tipo:'peca',chave:'peca'}
+      avisos:['Sem microfone: conecte um e escolha em CONFIGURAÇÕES > MICROFONE. (exemplo)'], alerta:null, aviso_gravacao:'', erros:[], holo:{tipo:'peca',chave:'peca'}
     });
   },
   enviar: function(){ return Promise.resolve(true); }, ouvir: function(){ return Promise.resolve(true); },
   historico: function(){ return Promise.resolve([{quando:'2026-10-28 08:58:00',papel:'usuario',texto:'Exemplo de pergunta'},{quando:'2026-10-28 08:58:02',papel:'assistente',texto:'Exemplo de resposta.'}]); },
-  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,holo_real:true,x_esconde:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+shift+space',atalho_barra:'ctrl+space',sistemas_web:[{nome:'CNPs',url:'http://192.168.1.96:8080/cnp/cnps',palavras:'cnp cnps'}],ignorar:['banco','senha']},foto:false,vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
+  config: function(){ return Promise.resolve({cfg:{nome:'Rodolfo',tratamento:'senhor',tema:'Azul',voz:'',microfone:null,ativacao_por_voz:true,responder_falando:true,olhos_ativos:true,holo_real:true,x_esconde:true,modo_ia:'normal',iniciar_com_windows:false,atalho:'ctrl+shift+space',atalho_barra:'ctrl+space',sistemas_web:[{nome:'CNPs',url:'http://192.168.1.96:8080/cnp/cnps',palavras:'cnp cnps'}],ignorar:['banco','senha'],som_lembrete:true,som_bip:false,avisar_cnp:true,voz_volume:1,voz_velocidade:1,silencio_horarios:['12:00-13:00']},foto:false,vozes:[{id:'xtts:Damien Black',nome:'Natural 1 — Damien Black'},{id:'piper:faber',nome:'Rápida — Faber'}],voz_atual:'xtts:Damien Black',microfones:[{id:1,nome:'Microfone USB (exemplo)'}],turbo:true}); },
   salvar_config: function(){ return Promise.resolve(true); }, testar_voz: function(){ return Promise.resolve(true); },
   gravar_voz: function(){ return Promise.resolve(true); }, usar_arquivo_voz: function(){ return Promise.resolve(false); },
   lembrete: function(){ return Promise.resolve(true); }, pendencia: function(){ return Promise.resolve(true); },
@@ -78,7 +78,10 @@ var EXEMPLO = {
   escolher_foto: function(){ return Promise.resolve(false); }, sistemas_lista: function(){ return Promise.resolve([]); },
   sistemas_salvar: function(){ return Promise.resolve(true); }, sistema_entrar: function(){ return Promise.resolve(true); },
   indice_resumo: function(){ return Promise.resolve(['C:\\ 412.880 itens (atualizado 28/10 08:05) (exemplo)','Z:\\ 96.214 itens (atualizado 28/10 06:10) (exemplo)']); },
-  indice_atualizar: function(){ return Promise.resolve(true); }
+  indice_atualizar: function(){ return Promise.resolve(true); },
+  sistema_testar: function(){ return Promise.resolve('OK: li 47 registros em 4 página(s) às 21:50. (exemplo)'); },
+  apelidos_lista: function(){ return Promise.resolve([{apelido:'pasta da brisa',caminho:'Z:\\Projetos\\Poltrona Brisa (exemplo)'}]); },
+  apelido_apagar: function(){ return Promise.resolve(true); }
 };
 
 var ROTULO_ESTADO = {carregando:'CARREGANDO', ocioso:'ESCUTANDO', gravando:'OUVINDO VOCÊ', transcrevendo:'ENTENDENDO',

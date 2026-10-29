@@ -59,6 +59,7 @@ class Rotinas:
                     self._reaberturas()
                     self._resolver()
                 self._bom_dia_se_preciso()
+                self.n.liberar_silenciados()
             except Exception:
                 log.exception("erro nas pendências")
 

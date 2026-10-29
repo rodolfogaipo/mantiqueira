@@ -47,6 +47,8 @@ class Nucleo:
         self.indice = self.memoria = self.frases = self.sistemas = self.intencoes = None
         self.detalhe_texto = ""          # lista de caminhos etc. mostrada na tela junto da resposta
         self.contexto_extra = ""
+        self.silenciados = []            # avisos que chegaram durante o silêncio
+        self.ultima_fala = ""            # para o "repete"
         self.latencia = None
         self.alerta = None
         self.janelas = {"main": None, "mini": None, "barra": None}
@@ -116,6 +118,7 @@ class Nucleo:
             self.memoria = Memoria(self)
             self.frases = Frases(self.db)
             self.sistemas = SistemasWeb(self)
+            self.sistemas.iniciar_vigia()
             self.intencoes = Intencoes(self)
             self.indice = Indice(self)
             self.indice.iniciar()
@@ -167,7 +170,8 @@ class Nucleo:
         from .ouvido import bipe
         self._por_voz = por_voz
         self.estado = "gravando"
-        bipe("inicio")
+        if self.cfg["som_bip"]:
+            bipe("inicio")
         self.mostrar_mini_seguro(True, "conversa")
 
     def _cancelou(self):
@@ -216,7 +220,8 @@ class Nucleo:
             resposta = "Desculpe, tive um problema agora. Pode repetir?"
         self.db.conversa_add("assistente", resposta + (("\n" + self.detalhe_texto) if self.detalhe_texto else ""))
         detalhe = self.detalhe_texto
-        if self.voz and (self.cfg["responder_falando"] or origem in ("voz", "barra")):
+        self.ultima_fala = resposta
+        if self.voz and not self.em_silencio() and (self.cfg["responder_falando"] or origem in ("voz", "barra")):
             self._mostrar_junto_da_voz(resposta, detalhe)
         else:
             self.ultima.update(assistente=resposta, detalhe=detalhe)
@@ -262,9 +267,44 @@ class Nucleo:
             self._reouvir = False
             self.ouvir_agora()
 
+    # ================================================================== silêncio
+    def em_silencio(self):
+        """True em horário de silêncio (Configurações) ou quando ele pediu 'modo silencioso'."""
+        if time.time() < getattr(self, "silencio_comeca", 0):
+            return False                              # ainda confirmando o pedido de silêncio
+        if time.time() < float(self.cfg["silencio_ate"] or 0):
+            return True
+        agora_hm = dt.datetime.now().strftime("%H:%M")
+        for faixa in self.cfg["silencio_horarios"] or []:
+            try:
+                ini, fim = [x.strip().zfill(5) for x in str(faixa).split("-")]
+            except ValueError:
+                continue
+            if (ini <= agora_hm < fim) if ini <= fim else (agora_hm >= ini or agora_hm < fim):
+                return True
+        return False
+
+    def liberar_silenciados(self):
+        """Quando o silêncio acaba, conta o que chegou durante ele."""
+        if not self.silenciados or self.em_silencio() or not self.pronto:
+            return
+        lista, self.silenciados = self.silenciados, []
+        unicos = list(dict.fromkeys(lista))
+        trat = self.cfg["tratamento"]
+        if len(unicos) == 1:
+            self.falar_aviso(f"{trat[:1].upper() + trat[1:]}, enquanto eu estava em silêncio chegou um aviso: {unicos[0]}")
+        else:
+            self.falar_aviso(f"{trat[:1].upper() + trat[1:]}, enquanto eu estava em silêncio chegaram {len(unicos)} avisos. "
+                             + " ".join(unicos[:6]))
+
     def falar_aviso(self, texto):
         self.ultima = {"usuario": "", "assistente": "", "detalhe": ""}
         self.db.conversa_add("assistente", texto)
+        self.ultima_fala = texto
+        if self.em_silencio():
+            self.silenciados.append(texto)
+            self.ultima["assistente"] = texto
+            return
         if self.voz:
             self._mostrar_junto_da_voz(texto)
         else:
@@ -318,11 +358,16 @@ class Nucleo:
             frase = f"{trat[:1].upper() + trat[1:]}, lembrando de novo: {l['texto']}."
         else:
             frase = f"{trat[:1].upper() + trat[1:]}, está na hora: {l['texto']}."
-        try:
-            from .ouvido import toque_lembrete
-            toque_lembrete()
-        except Exception:
-            log.exception("toque do lembrete")
+        if self.em_silencio():
+            self.falar_aviso(frase)                  # em silêncio: só tela; fala depois
+            threading.Thread(target=self.mostrar_mini_seguro, args=(True, "alerta"), daemon=True).start()
+            return
+        if self.cfg["som_lembrete"]:
+            try:
+                from .ouvido import toque_lembrete
+                toque_lembrete()
+            except Exception:
+                log.exception("toque do lembrete")
         try:
             self.falar_aviso(frase)
         except Exception:
@@ -429,6 +474,20 @@ class Nucleo:
             log.exception("holo")
             return {"tipo": "logo", "chave": "logo"}
 
+    def _avisos(self):
+        out = []
+        if self.em_silencio():
+            ate = float(self.cfg["silencio_ate"] or 0)
+            out.append("MODO SILENCIOSO" + (f" ATÉ {time.strftime('%H:%M', time.localtime(ate))}" if ate > time.time() else "")
+                       + " — diga \"pode falar\" para eu voltar.")
+        if self.ouvido and not self.ouvido.ok:
+            out.append("Sem microfone: conecte um e escolha em CONFIGURAÇÕES > MICROFONE.")
+        if self.sistemas:
+            out += self.sistemas.estado()
+        if self.indice:
+            out += self.indice.avisos()
+        return out
+
     # ================================================================== estado para a tela
     def estado_ui(self):
         cfg = self.cfg
@@ -485,7 +544,7 @@ class Nucleo:
             "registro": self.olhos.registro_recente(4) if self.olhos else [],
             "holo": self._holo_ui(),
             "ultima": self.ultima, "alerta": self.alerta,
-            "indice": (self.indice.resumo() if self.indice else []), "aviso_gravacao": self.aviso_gravacao,
+            "indice": (self.indice.resumo() if self.indice else []), "avisos": self._avisos(), "aviso_gravacao": self.aviso_gravacao,
             "palavra": "MANTIQUEIRA", "atalho": cfg["atalho"].upper().replace("SPACE", "ESPAÇO"),
             "ativacao": bool(cfg["ativacao_por_voz"]),
         }

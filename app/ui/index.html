@@ -116,6 +116,8 @@
   <div id="reg" class="mono registro"></div>
 </section>
 
+<div id="avisos" class="abs avisos" style="left:400px;width:640px;top:92px" role="status" hidden></div>
+
 <section class="abs meio" style="left:400px;width:640px;top:680px">
   <div class="eq" id="eq" aria-hidden="true"></div>
   <div class="conversa">
@@ -181,6 +183,10 @@
           <div class="linha"><button type="button" class="chip" id="cArqVoz">USAR ÁUDIO DO CELULAR</button><button type="button" class="chip" id="cGravar">GRAVAR 20 S NO MICROFONE</button></div>
           <small id="cAviso" class="mu">Para a voz ficar mais humana e com sotaque brasileiro: grave no celular 20 a 30 segundos de alguém (que autorize) lendo um texto com calma, num lugar silencioso. Pode ser áudio do WhatsApp ou do gravador. Passe o arquivo para o PC e clique em USAR ÁUDIO DO CELULAR.</small>
         </div>
+        <div class="campo"><span>Volume e velocidade da voz</span>
+          <div class="linha"><label class="mini" for="cVol">VOLUME</label><input id="cVol" type="range" min="0.15" max="1.8" step="0.05">
+            <label class="mini" for="cVel">VELOCIDADE</label><input id="cVel" type="range" min="0.75" max="1.35" step="0.05"></div>
+        </div>
         <label class="campo"><span>Microfone</span><select id="cMic"></select></label>
         <div class="campo"><span>Foto do holograma (quando estou parado)</span>
           <div class="linha"><button type="button" class="chip" id="cFoto">ESCOLHER FOTO</button><small id="cFotoOk" class="mu"></small></div>
@@ -188,6 +194,7 @@
         <div class="campo"><span>Sistemas da empresa (só leitura)</span>
           <div id="cSis" class="sisLista"></div>
           <div class="linha"><button type="button" class="chip" id="cSisAdd">+ ADICIONAR SISTEMA</button></div>
+          <small id="cSisRes" class="mono sisres" role="status"></small>
           <small class="mu">Clique em ENTRAR uma vez para fazer o login; o Mantiqueira guarda a sessão e passa a consultar sozinho. Depois pergunte, por exemplo: "quais CNPs tem no programa?"</small>
         </div>
         <label class="campo"><span>Modo da IA</span>
@@ -201,6 +208,12 @@
         <label class="check"><input id="cIni" type="checkbox"><span>Abrir junto com o Windows</span></label>
         <label class="check"><input id="cHolo" type="checkbox"><span>Holograma 3D da peça aberta no SolidWorks</span></label>
         <label class="check"><input id="cX" type="checkbox"><span>O X só minimiza (continua avisando)</span></label>
+        <label class="check"><input id="cSomL" type="checkbox"><span>Tocar sinal antes de avisar um lembrete</span></label>
+        <label class="check"><input id="cSomB" type="checkbox"><span>Bip quando eu chamar para falar</span></label>
+        <label class="check"><input id="cCnp" type="checkbox"><span>Avisar CNPs novos e datas previstas</span></label>
+        <label class="campo"><span>Horários de silêncio (um por linha, ex.: 12:00-13:00)</span><textarea id="cSil" rows="2" placeholder="12:00-13:00"></textarea></label>
+        <div class="campo"><span>Apelidos de arquivos e pastas</span><div id="cApel" class="sisLista mono"></div>
+          <small class="mu">Para criar, diga: "quando eu falar pasta da Brisa, abre a pasta Poltrona Brisa no File Projetos".</small></div>
         <label class="campo"><span>Atalho para falar</span><input id="cAtalho" type="text" placeholder="ctrl+shift+space"></label>
         <label class="campo"><span>Atalho da barra rápida</span><input id="cAtalhoB" type="text" placeholder="ctrl+space"></label>
         <div class="campo"><span>Cor</span><div id="cTemas" class="temas"></div></div>

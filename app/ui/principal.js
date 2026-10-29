@@ -163,6 +163,12 @@
     var u = e.ultima || {};
     $('uLine').textContent = u.usuario ? 'VOCÊ › ' + u.usuario : (e.pronto ? 'Diga "' + e.palavra + '" ou aperte ' + e.atalho + ' para falar.' : ' ');
     $('aLine').textContent = u.assistente ? '“' + u.assistente + '”' : (e.estado === 'pensando' ? '…' : ' ');
+    var av = e.avisos || [], avs = av.join('|');
+    if ($('avisos').getAttribute('data-v') !== avs){
+      $('avisos').setAttribute('data-v', avs);
+      $('avisos').innerHTML = av.map(function(x){ return '<div title="' + esc(x) + '">■ ' + esc(x) + '</div>'; }).join('');
+      $('avisos').hidden = !av.length;
+    }
     var det = u.detalhe || '';
     if ($('dLine').getAttribute('data-v') !== det){ $('dLine').setAttribute('data-v', det); $('dLine').textContent = det; $('dLine').hidden = !det; }
     $('bMic').classList.toggle('ativo', e.estado === 'gravando');
@@ -315,6 +321,11 @@
       $('cAtalho').value = g.atalho || 'ctrl+shift+space';
       $('cAtalhoB').value = g.atalho_barra || 'ctrl+space';
       $('cFotoOk').textContent = c.foto ? 'FOTO ESCOLHIDA' : 'NENHUMA FOTO AINDA';
+      $('cSomL').checked = g.som_lembrete !== false; $('cSomB').checked = g.som_bip !== false; $('cCnp').checked = g.avisar_cnp !== false;
+      $('cVol').value = g.voz_volume || 1; $('cVel').value = g.voz_velocidade || 1;
+      $('cSil').value = (g.silencio_horarios || []).join('\n');
+      $('cSisRes').textContent = '';
+      pintarApel();
       pintarSis(g.sistemas_web || []);
       $('cIgn').value = (g.ignorar || []).join('\n');
       temaEscolhido = g.tema || 'Azul'; pintarTemas();
@@ -326,6 +337,7 @@
              '<input class="u" type="text" aria-label="Endereço do sistema" value="' + esc(s.url) + '">' +
              '<input class="p" type="hidden" value="' + esc(s.palavras || '') + '">' +
              '<button type="button" class="chip" data-entrar="' + esc(s.nome) + '">ENTRAR</button>' +
+             '<button type="button" class="chip" data-testar="' + esc(s.nome) + '">TESTAR</button>' +
              '<button type="button" class="chip" data-tirar="' + i + '" aria-label="Remover">✕</button></div>';
     }).join('') || '<small class="mu">Nenhum sistema cadastrado.</small>';
   }
@@ -339,9 +351,25 @@
     if (!b) return;
     if (b.hasAttribute('data-entrar')){
       chamar('sistemas_salvar', lerSis()).then(function(){ chamar('sistema_entrar', b.getAttribute('data-entrar')); });
+    } else if (b.hasAttribute('data-testar')){
+      $('cSisRes').textContent = 'TESTANDO ' + b.getAttribute('data-testar') + '… (pode levar até 1 minuto)';
+      chamar('sistemas_salvar', lerSis()).then(function(){ return chamar('sistema_testar', b.getAttribute('data-testar')); })
+        .then(function(r){ $('cSisRes').textContent = r; });
     } else if (b.hasAttribute('data-tirar')){
       var l = lerSis(); l.splice(Number(b.getAttribute('data-tirar')), 1); pintarSis(l);
     }
+  });
+  function pintarApel(){
+    chamar('apelidos_lista').then(function(l){
+      $('cApel').innerHTML = (l || []).map(function(a){
+        return '<div class="apel"><span title="' + esc(a.caminho) + '"><b>' + esc(a.apelido) + '</b> → ' + esc(a.caminho) + '</span>' +
+               '<button type="button" class="chip" data-apagar="' + esc(a.apelido) + '" aria-label="Apagar apelido">✕</button></div>';
+      }).join('') || '<small class="mu">Nenhum apelido ainda.</small>';
+    });
+  }
+  $('cApel').addEventListener('click', function(ev){
+    var b = ev.target.closest('[data-apagar]');
+    if (b) chamar('apelido_apagar', b.getAttribute('data-apagar')).then(pintarApel);
   });
   $('cSisAdd').addEventListener('click', function(){ var l = lerSis(); l.push({nome: 'Novo', url: 'http://', palavras: ''}); pintarSis(l); });
   $('cFoto').addEventListener('click', function(){
@@ -366,7 +394,8 @@
       olhos_ativos: $('cOlhos').checked, iniciar_com_windows: $('cIni').checked,
       holo_real: $('cHolo').checked, x_esconde: $('cX').checked,
       atalho: $('cAtalho').value.trim() || 'ctrl+shift+space', atalho_barra: $('cAtalhoB').value.trim() || 'ctrl+space',
-      sistemas_web: lerSis(), ignorar: $('cIgn').value, tema: temaEscolhido
+      sistemas_web: lerSis(), som_lembrete: $('cSomL').checked, som_bip: $('cSomB').checked, avisar_cnp: $('cCnp').checked,
+      voz_volume: Number($('cVol').value), voz_velocidade: Number($('cVel').value), silencio_horarios: $('cSil').value, ignorar: $('cIgn').value, tema: temaEscolhido
     }).then(function(){ $('cOk').textContent = 'SALVO'; });
   });
 })();

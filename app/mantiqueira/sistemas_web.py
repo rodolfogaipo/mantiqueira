@@ -229,6 +229,131 @@ class SistemasWeb:
         except Exception:
             return None
 
+    # ------------------------------------------------------------------ teste (botão TESTAR)
+    def testar(self, nome):
+        s = next((x for x in self.lista() if x["nome"] == nome), None)
+        if not s:
+            return "Sistema não encontrado."
+        self.cache.pop(nome, None)
+        try:
+            d = self.ler(s, cache_seg=0)
+        except Exception as e:
+            return f"NÃO CONSEGUI LER ({e}). Clique em ENTRAR, faça o login, espere a lista aparecer e feche."
+        if d.get("login"):
+            return "PRECISA DE LOGIN: clique em ENTRAR e entre com seu usuário."
+        if not d.get("linhas"):
+            return "Entrei, mas não achei nenhuma tabela na página."
+        return f"OK: li {len(d['linhas'])} registros em {d['paginas']} página(s) às {d['hora']}."
+
+    def estado(self):
+        """Avisos para o painel."""
+        return [f"O sistema de {n} precisa de login (Configurações > Sistemas da empresa > ENTRAR)." for n in sorted(self.precisa_login)]
+
+    # ------------------------------------------------------------------ aviso de CNP novo / data prevista
+    def iniciar_vigia(self):
+        threading.Thread(target=self._vigia, daemon=True, name="vigia-cnp").start()
+
+    @staticmethod
+    def _coluna(cab, *palavras):
+        for i, c in enumerate(cab):
+            cn = textutil.sem_acento((c or "").lower())
+            if all(p in cn for p in palavras):
+                return i
+        return None
+
+    @staticmethod
+    def _data(txt):
+        import datetime as dt
+        m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", txt or "")
+        if m:
+            a = int(m.group(3))
+            try:
+                return dt.date(a + 2000 if a < 100 else a, int(m.group(2)), int(m.group(1)))
+            except ValueError:
+                return None
+        m = re.search(r"(\d{4})-(\d{2})-(\d{2})", txt or "")
+        if m:
+            try:
+                return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                return None
+        return None
+
+    def _vigia(self):
+        import datetime as dt
+        time.sleep(150)
+        while True:
+            try:
+                cfg = self.n.cfg
+                h = dt.datetime.now().hour
+                if cfg["avisar_cnp"] and 6 <= h < 20 and getattr(self.n, "pronto", False):
+                    for s in self.lista():
+                        if "cnp" in s["url"].lower() or "cnp" in s["nome"].lower():
+                            self._conferir(s)
+            except Exception:
+                log.exception("vigia de CNPs")
+            time.sleep(max(5, int(self.n.cfg["cnp_intervalo_min"] or 15)) * 60)
+
+    def _conferir(self, s):
+        import datetime as dt
+        db = self.n.db
+        d = self.ler(s, cache_seg=60)
+        if d.get("login") or not d.get("linhas"):
+            return
+        cab, linhas = d["cab"], d["linhas"]
+        i_id = self._coluna(cab, "id")
+        if i_id is None or (cab[i_id] or "").strip().lower() not in ("id", "#", "código", "codigo", "cód", "cod"):
+            i_id = next((i for i, c in enumerate(cab) if textutil.sem_acento((c or "").lower()).strip() in ("id", "#", "codigo", "cod")), None)
+        i_prod = self._coluna(cab, "produto")
+        i_ped = self._coluna(cab, "pedido")
+        i_data = self._coluna(cab, "prev")
+        if i_data is None:
+            i_data = self._coluna(cab, "data")
+
+        def chave(l):
+            return (l[i_id] if i_id is not None and i_id < len(l) else " | ".join(l)).strip()
+
+        def nome(l):
+            prod = l[i_prod] if i_prod is not None and i_prod < len(l) else (l[1] if len(l) > 1 else l[0])
+            ped = l[i_ped] if i_ped is not None and i_ped < len(l) and l[i_ped] else ""
+            return prod + (f", pedido {ped}" if ped else "")
+        k_vistos = f"cnp_vistos:{s['nome']}"
+        antigos = db.kv_get(k_vistos)
+        atuais = [chave(l) for l in linhas]
+        db.kv_set(k_vistos, json.dumps(atuais[-3000:], ensure_ascii=False))
+        trat = self.n.cfg["tratamento"]
+        if antigos is not None:
+            vistos = set(json.loads(antigos))
+            novos = [l for l in linhas if chave(l) not in vistos]
+            if 0 < len(novos) <= 15:
+                if len(novos) == 1:
+                    self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, entrou um CNP novo no sistema: {nome(novos[0])}.")
+                else:
+                    self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, entraram {len(novos)} CNPs novos no sistema: "
+                                       + "; ".join(nome(l) for l in novos[:4]) + ".")
+        if i_data is None:
+            return
+        hoje = dt.date.today()
+        k_av = f"cnp_datas_avisadas:{hoje}"
+        avisados = set(json.loads(db.kv_get(k_av, "[]")))
+        for quando, rotulo in ((hoje, "hoje"), (hoje + dt.timedelta(days=1), "amanhã")):
+            if rotulo == "hoje" and dt.datetime.now().hour >= 12:
+                continue
+            lista = []
+            for l in linhas:
+                if i_data < len(l) and self._data(l[i_data]) == quando:
+                    k = f"{chave(l)}:{rotulo}"
+                    if k not in avisados:
+                        avisados.add(k)
+                        lista.append(nome(l))
+            if len(lista) == 1:
+                self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, o CNP {lista[0]} tem data prevista para {rotulo}.")
+            elif lista:
+                extra = f", e mais {len(lista) - 4}" if len(lista) > 4 else ""
+                self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, {len(lista)} CNPs têm data prevista para {rotulo}: "
+                                   + "; ".join(lista[:4]) + extra + ".")
+        db.kv_set(k_av, json.dumps(sorted(avisados), ensure_ascii=False))
+
     def contexto(self, pergunta):
         """(sistema, texto) para a IA. Em caso de erro/login, o texto explica o problema."""
         s = self.qual(pergunta)

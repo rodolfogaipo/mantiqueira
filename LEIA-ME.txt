@@ -66,6 +66,39 @@ SISTEMAS DA EMPRESA (CNPs)
   lendo (nunca cria, altera ou apaga nada). "abre o sistema de CNPs"
   abre no navegador.
 
+SONS, VOZ E SILÊNCIO
+- "desliga o bip" / "tira o som do aviso" / "liga o bip": ou nas
+  CONFIGURAÇÕES (caixinhas de sinal e bip). Desligado, ele só fala.
+- "repete": repete a última coisa que ele falou.
+- "fala mais baixo / mais alto / mais devagar / mais rápido",
+  "volume normal". Também em CONFIGURAÇÕES (volume e velocidade).
+- "modo silencioso por 1 hora", "fica em silêncio até as 14",
+  "estou em reunião": os avisos só aparecem na tela e ele conta depois.
+  "pode falar" faz ele voltar. Horários fixos de silêncio (ex.:
+  12:00-13:00) ficam em CONFIGURAÇÕES.
+
+APELIDOS
+- "quando eu falar pasta da Brisa, abre a pasta Poltrona Brisa no File
+  Projetos". Depois é só dizer "abre a pasta da Brisa".
+- Depois de achar ou abrir algo: "chama esse de orçamento da Brisa".
+- "quais são meus apelidos", "apaga o apelido pasta da Brisa".
+  A lista também fica em CONFIGURAÇÕES.
+
+O QUE EU FIZ / O QUE MUDOU
+- "o que eu abri hoje?" (ou ontem): lista os arquivos com horários.
+- "o que mudou na pasta Poltrona Brisa hoje?"
+
+AVISO DE CNP
+- Com o login feito, a cada 15 minutos (das 6h às 20h) ele confere o
+  sistema, só lendo, e avisa CNP novo e CNP com data prevista para hoje
+  ou amanhã. Pode desligar em CONFIGURAÇÕES.
+- O botão TESTAR (ao lado de ENTRAR) mostra na hora se ele está
+  conseguindo ler o sistema.
+
+AVISOS NO PAINEL
+- Quando faltar microfone, login no sistema ou o mapa da rede estiver
+  velho, aparece uma faixa amarela no alto da tela dizendo o que fazer.
+
 MEMÓRIA
 - Ele vai aprendendo com as conversas (fatos que o senhor conta, onde
   ficam os arquivos que pede, horários e programas de costume).

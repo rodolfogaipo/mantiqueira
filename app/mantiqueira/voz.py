@@ -214,6 +214,19 @@ class Voz:
                     except Exception:
                         pass
 
+    def _vel(self):
+        try:
+            return max(0.75, min(1.35, float(self.n.cfg.get("voz_velocidade", 1.0))))
+        except Exception:
+            return 1.0
+
+    def _vol(self, audio):
+        try:
+            v = max(0.15, min(1.8, float(self.n.cfg.get("voz_volume", 1.0))))
+        except Exception:
+            v = 1.0
+        return np.clip(audio * v, -1.0, 1.0).astype(np.float32) if v != 1.0 else audio
+
     def _limpar_gpu(self):
         try:
             import torch
@@ -237,7 +250,7 @@ class Voz:
                         if self._parar:
                             break
                         out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
-                                                  top_k=50, top_p=0.85, speed=1.0, enable_text_splitting=False)
+                                                  top_k=50, top_p=0.85, speed=self._vel(), enable_text_splitting=False)
                         wav = np.asarray(out["wav"], dtype=np.float32)
                         fila.put(suavizar(wav))
             except Exception as e:
@@ -255,7 +268,7 @@ class Voz:
                 break
             k += 1
             self._ao_frase(k, len(frases))
-            sd.play(np.concatenate([a, pausa]), 24000, blocking=True, latency="high")
+            sd.play(self._vol(np.concatenate([a, pausa])), 24000, blocking=True, latency="high")
             tocou = True
         if erro and not tocou:
             raise erro[0]
@@ -268,13 +281,13 @@ class Voz:
         cfg = json.loads(paths.PIPER_VOZ.with_suffix(".onnx.json").read_text(encoding="utf-8"))
         taxa = int(cfg.get("audio", {}).get("sample_rate", 22050))
         r = subprocess.run([str(paths.PIPER_EXE), "--model", str(paths.PIPER_VOZ), "--output_raw",
-                            "--length_scale", "0.95"], input=texto.encode("utf-8"), capture_output=True,
+                            "--length_scale", f"{0.95 / self._vel():.2f}"], input=texto.encode("utf-8"), capture_output=True,
                            timeout=60, creationflags=sistema.SEM_JANELA, cwd=str(paths.PIPER_EXE.parent))
         audio = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
         if audio.size and not self._parar:
             self._ao_frase(1, 1)
             self.tipo_atual = "RÁPIDA"
-            sd.play(audio, taxa, blocking=True, latency="high")
+            sd.play(self._vol(audio), taxa, blocking=True, latency="high")
 
 
 def preparar_audio_voz(origem, destino, max_seg=30):
