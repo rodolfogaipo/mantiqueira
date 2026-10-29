@@ -105,10 +105,16 @@ class Rotinas:
         self.db.kv_set("bom_dia", hoje)
         self.n.falar_aviso(self.bom_dia())
 
-    def boas_vindas(self):
-        """Ao ligar: 'Bem-vindo de volta'. Na primeira vez do dia, junta o resumo (lembretes, pendências, ontem)."""
+    def boas_vindas(self, ja_saudou=False):
+        """Ao ligar: 'Bem-vindo de volta'. Na primeira vez do dia, junta o resumo (lembretes, pendências, ontem).
+        Se a saudação gravada já tocou na abertura, devolve só o resumo do dia (ou nada)."""
         trat = self.n.cfg["tratamento"]
         hoje = str(dt.date.today())
+        if ja_saudou:
+            if self.db.kv_get("bom_dia") != hoje:
+                self.db.kv_set("bom_dia", hoje)
+                return self.bom_dia()
+            return ""
         if self.db.kv_get("bom_dia") != hoje:
             self.db.kv_set("bom_dia", hoje)
             resumo = self.bom_dia()

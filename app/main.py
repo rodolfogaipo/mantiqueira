@@ -71,11 +71,23 @@ def main():
             aviso("O Mantiqueira já está aberto.", erro=False)
         return
 
+    # como nos filmes: a saudação gravada toca antes de carregar o resto
+    saudou = False
+    try:
+        from mantiqueira.config import Config
+        from mantiqueira import saudacao
+        saudou = saudacao.tocar(Config())
+    except Exception:
+        log.exception("saudação de abertura")
+
     import webview
     from mantiqueira.nucleo import Nucleo
     from mantiqueira.api import Api
 
     nucleo = Nucleo()
+    nucleo.saudou_no_inicio = saudou
+    if saudou:
+        nucleo.ultima = {"usuario": "", "assistente": saudacao.texto(nucleo.cfg), "detalhe": ""}
     api = Api(nucleo)
 
     opcoes = dict(title="Mantiqueira", url="ui/index.html", js_api=api, width=1440, height=900,

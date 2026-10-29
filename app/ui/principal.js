@@ -94,8 +94,16 @@
     $('stModo').textContent = e.modo_ia + (e.dispositivo && e.dispositivo !== '—' ? ' · ' + e.dispositivo : '');
     $('coreTxt').textContent = e.pronto ? rotuloEstado(e) : 'CARREGANDO';
     $('coreSub').textContent = e.latencia ? ('ÚLTIMA RESPOSTA ' + String(e.latencia).replace('.', ',') + 's') : ' ';
-    $('boot').hidden = !e.boot;
-    $('boot').textContent = e.boot || '';
+    var bp = e.boot_passos || [];
+    $('boot').hidden = e.pronto || (!e.boot && !bp.length);
+    if (bp.length){
+      $('boot').innerHTML = bp.map(function(x){
+        var st = x.ok === true ? '<span class="ok">✓ OK</span>' : (x.ok === false ? '<span class="al">✕ FALHOU</span>' : '<span class="pisca">…</span>');
+        return '<div><span class="mu">▸</span> ' + esc(x.msg) + ' ' + st + '</div>';
+      }).join('');
+    } else {
+      $('boot').textContent = e.boot || '';
+    }
 
     /* arco medidor: percentual de subsistemas ok */
     var ok = (e.sub || []).filter(function(s){ return !s.alerta || s.nome === 'VISÃO'; }).length;

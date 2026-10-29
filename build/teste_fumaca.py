@@ -371,6 +371,33 @@ def _():
     print("::notice title=Novidades 1.4.2::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
 
 
+@etapa("saudação de abertura (bem-vindo de volta)")
+def _():
+    import numpy as np
+    from mantiqueira.config import Config
+    from mantiqueira import saudacao, nucleo
+
+    class VozFalsa:
+        def voz_padrao(self):
+            return "teste"
+
+        def gerar_audio(self, texto, voz_id=None):
+            t = np.arange(24000) / 24000
+            return (0.2 * np.sin(2 * np.pi * 220 * t)).astype(np.float32), 24000
+    cfg = Config()
+    for f in (saudacao.WAV, saudacao.META):
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+    assert not saudacao.pronta(cfg)
+    assert saudacao.gravar(VozFalsa(), cfg) and saudacao.pronta(cfg)
+    assert not saudacao.precisa_gravar(cfg, "teste")
+    tocou = saudacao.tocar(cfg, esperar=True)
+    travada = nucleo.Nucleo._tela_travada()
+    print(f"::notice title=Saudação::gravada ok, tocou={tocou}, tela travada={travada}", flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

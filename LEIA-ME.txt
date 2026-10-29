@@ -128,7 +128,12 @@ HOLOGRAMA
 
 PRIMEIRA ABERTURA
 - Leva cerca de 1 minuto para carregar a IA e a voz.
-- Ao ligar junto com o Windows ele diz "Bem-vindo de volta, senhor".
+- Marque CONFIGURAÇÕES > "Abrir junto com o Windows".
+- "Bem-vindo de volta, senhor": da segunda abertura em diante ele fala
+  isso logo nos primeiros segundos, antes de carregar tudo (na primeira
+  vez ele grava a frase com a voz escolhida). Também fala ao desbloquear
+  o computador ou ao voltar depois de 15 minutos parado (no máximo uma
+  vez a cada 30 minutos). Em modo silencioso, não fala.
 - Abra CONFIGURAÇÕES para escolher a voz (botão TESTAR), o microfone e a cor.
 - Para criar uma voz personalizada, use "GRAVAR 20 S" e leia qualquer texto
   em voz alta. Use apenas a voz de quem autorizar.

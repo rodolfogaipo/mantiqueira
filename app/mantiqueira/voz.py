@@ -67,6 +67,7 @@ class Voz:
         self.falando = False
         self.tipo_atual = "—"
         self._parar = False
+        self._lock_xtts = threading.Lock()
         self._ao_frase = lambda k, t: None
         threading.Thread(target=self._loop, daemon=True, name="voz").start()
 
@@ -214,6 +215,33 @@ class Voz:
                     except Exception:
                         pass
 
+    def gerar_audio(self, texto, voz_id=None):
+        """Gera o áudio sem tocar (para guardar a saudação). Devolve (array float32, taxa) ou (None, 0)."""
+        texto = textutil.para_fala(texto or "")
+        voz_id = voz_id or self.voz_padrao()
+        if not texto:
+            return None, 0
+        if voz_id.startswith("xtts:") and self.xtts is not None:
+            import torch
+            lat, emb = self._lat(voz_id)
+            partes = []
+            with torch.inference_mode():
+                for f in dividir_frases(texto):
+                    with self._lock_xtts:
+                        out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
+                                                  top_k=50, top_p=0.85, speed=self._vel(), enable_text_splitting=False)
+                    partes.append(suavizar(np.asarray(out["wav"], dtype=np.float32)))
+                    partes.append(np.zeros(int(24000 * 0.12), dtype=np.float32))
+            return np.concatenate(partes), 24000
+        if not (paths.PIPER_EXE.exists() and paths.PIPER_VOZ.exists()):
+            return None, 0
+        cfg = json.loads(paths.PIPER_VOZ.with_suffix(".onnx.json").read_text(encoding="utf-8"))
+        taxa = int(cfg.get("audio", {}).get("sample_rate", 22050))
+        r = subprocess.run([str(paths.PIPER_EXE), "--model", str(paths.PIPER_VOZ), "--output_raw",
+                            "--length_scale", f"{0.95 / self._vel():.2f}"], input=texto.encode("utf-8"), capture_output=True,
+                           timeout=60, creationflags=sistema.SEM_JANELA, cwd=str(paths.PIPER_EXE.parent))
+        return np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0, taxa
+
     def _vel(self):
         try:
             return max(0.75, min(1.35, float(self.n.cfg.get("voz_velocidade", 1.0))))
@@ -249,8 +277,9 @@ class Voz:
                     for f in frases:
                         if self._parar:
                             break
-                        out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
-                                                  top_k=50, top_p=0.85, speed=self._vel(), enable_text_splitting=False)
+                        with self._lock_xtts:
+                            out = self.xtts.inference(f, "pt", lat, emb, temperature=0.7, repetition_penalty=6.0,
+                                                      top_k=50, top_p=0.85, speed=self._vel(), enable_text_splitting=False)
                         wav = np.asarray(out["wav"], dtype=np.float32)
                         fila.put(suavizar(wav))
             except Exception as e:

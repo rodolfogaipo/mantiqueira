@@ -109,7 +109,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 .ibP{background:var(--p);border:0;color:#000}
 
 .rodape{left:70px;right:70px;bottom:22px;display:flex;justify-content:space-between;gap:24px;font-size:11px;letter-spacing:2px;color:var(--mu)}
-.boot{left:470px;width:500px;top:640px;text-align:center;font-size:12px;letter-spacing:2px;color:var(--al)}
+.boot{left:420px;width:600px;top:610px;background:rgba(3,10,28,.85);padding:6px 0;text-align:center;font-size:11px;letter-spacing:2px;color:var(--tx);line-height:1.7}
+.boot .ok{color:var(--p)}.boot .pisca{color:var(--al);animation:piscaB 1s steps(2) infinite}
+@keyframes piscaB{50%{opacity:.2}}
 
 .alerta{left:470px;top:250px;width:500px;padding:24px 28px;background:rgba(3,10,28,.94);border:1px solid var(--al);
   box-shadow:0 0 40px rgba(var(--agl),.35);clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px);z-index:5}

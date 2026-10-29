@@ -48,6 +48,9 @@ class Nucleo:
         self.detalhe_texto = ""          # lista de caminhos etc. mostrada na tela junto da resposta
         self.contexto_extra = ""
         self.silenciados = []            # avisos que chegaram durante o silêncio
+        self.saudou_no_inicio = False    # main.py toca a saudação gravada antes de tudo carregar
+        self.boot_passos = []
+        self._ultima_saudacao = 0
         self.ultima_fala = ""            # para o "repete"
         self.latencia = None
         self.alerta = None
@@ -69,12 +72,16 @@ class Nucleo:
 
     def _passo(self, msg, fn):
         self.boot_msg = msg
+        item = {"msg": msg.rstrip("…. ").upper(), "ok": None}
+        self.boot_passos.append(item)
         try:
             fn()
+            item["ok"] = True
             return True
         except Exception as e:
             log.exception("falha em: %s", msg)
             self.erros.append(f"{msg} {e}")
+            item["ok"] = False
             return False
 
     def _boot(self):
@@ -156,9 +163,67 @@ class Nucleo:
         log.info("Mantiqueira pronta. Erros: %s", self.erros)
         time.sleep(1.0)
         try:
-            self.falar_aviso(self.rotinas.boas_vindas())
+            txt = self.rotinas.boas_vindas(ja_saudou=self.saudou_no_inicio)
+            if txt:
+                self.falar_aviso(txt)
         except Exception:
             log.exception("boas-vindas falhou")
+        self._ultima_saudacao = time.time()
+        threading.Thread(target=self._gravar_saudacao, daemon=True, name="saudacao").start()
+        threading.Thread(target=self._vigia_volta, daemon=True, name="volta").start()
+
+    # ================================================================== "bem-vindo de volta"
+    def _gravar_saudacao(self):
+        """Grava (uma vez) a saudação com a voz escolhida, para tocar logo na próxima abertura."""
+        from . import saudacao
+        time.sleep(25)
+        while self.voz and self.voz.falando:
+            time.sleep(2)
+        try:
+            if self.voz:
+                saudacao.gravar(self.voz, self.cfg)
+        except Exception:
+            log.exception("gravar saudação")
+
+    @staticmethod
+    def _tela_travada():
+        import ctypes
+        u = ctypes.windll.user32
+        h = u.OpenInputDesktop(0, False, 0x0100)      # DESKTOP_SWITCHDESKTOP
+        if not h:
+            return True
+        try:
+            return not u.SwitchDesktop(h)
+        finally:
+            u.CloseDesktop(h)
+
+    def _vigia_volta(self):
+        """Ao desbloquear o PC, ou ao voltar depois de 15 min parado: 'Bem-vindo de volta, senhor'."""
+        from . import saudacao
+        from .olhos import segundos_inativo
+        travada_antes, parado_antes = False, 0.0
+        while True:
+            time.sleep(2)
+            try:
+                travada = self._tela_travada()
+                parado = segundos_inativo()
+                voltou = (travada_antes and not travada) or (parado_antes >= 900 and parado < 5 and not travada)
+                travada_antes, parado_antes = travada, parado
+                if not voltou or time.time() - self._ultima_saudacao < 1800 or self.em_silencio():
+                    continue
+                if self.voz and self.voz.falando:
+                    continue
+                self._ultima_saudacao = time.time()
+                time.sleep(1.5)                       # dá tempo da tela acender
+                log.info("bem-vindo de volta (desbloqueio/retorno)")
+                if saudacao.tocar(self.cfg):
+                    self.ultima = {"usuario": "", "assistente": saudacao.texto(self.cfg), "detalhe": ""}
+                    self.ultima_fala = saudacao.texto(self.cfg)
+                else:
+                    self.falar_aviso(saudacao.texto(self.cfg))
+            except Exception:
+                log.exception("vigia de volta")
+                time.sleep(30)
 
     # ================================================================== conversa
     def ouvir_agora(self):
@@ -272,17 +337,8 @@ class Nucleo:
         """True em horário de silêncio (Configurações) ou quando ele pediu 'modo silencioso'."""
         if time.time() < getattr(self, "silencio_comeca", 0):
             return False                              # ainda confirmando o pedido de silêncio
-        if time.time() < float(self.cfg["silencio_ate"] or 0):
-            return True
-        agora_hm = dt.datetime.now().strftime("%H:%M")
-        for faixa in self.cfg["silencio_horarios"] or []:
-            try:
-                ini, fim = [x.strip().zfill(5) for x in str(faixa).split("-")]
-            except ValueError:
-                continue
-            if (ini <= agora_hm < fim) if ini <= fim else (agora_hm >= ini or agora_hm < fim):
-                return True
-        return False
+        from .saudacao import silencio_ativo
+        return silencio_ativo(self.cfg)
 
     def liberar_silenciados(self):
         """Quando o silêncio acaba, conta o que chegou durante ele."""
@@ -534,7 +590,7 @@ class Nucleo:
             sub.append({"nome": "VRAM", "pct": g["usada"] / max(1, g["total"]), "val": f"{g['usada'] / 1024:.1f}G",
                         "alerta": g["usada"] / max(1, g["total"]) > 0.92})
         return {
-            "pronto": self.pronto, "boot": self.boot_msg, "erros": self.erros[-3:],
+            "pronto": self.pronto, "boot": self.boot_msg, "boot_passos": ([] if self.pronto else self.boot_passos[-7:]), "erros": self.erros[-3:],
             "estado": self.estado, "tema": cfg["tema"], "nome": cfg["nome"],
             "cpu": round(cpu), "ram": f"{ram_u:.1f}/{ram_t:.0f}G",
             "gpu": (f"{g['usada'] / 1024:.1f}/{g['total'] / 1024:.0f}G" if g else "—"),
