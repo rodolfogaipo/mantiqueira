@@ -91,7 +91,7 @@ class Intencoes:
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
         for f in (self.parar, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
-                  self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
+                  self.conteudo_pasta, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
                 r = f(p, pergunta)
             except Exception:
@@ -699,6 +699,82 @@ class Intencoes:
         texto, detalhe = r
         self.n.detalhe_texto = detalhe
         return texto
+
+    # ------------------------------------------------------------------ "quantas pastas tem no File Projetos?"
+    def conteudo_pasta(self, p, original):
+        """Lista o que existe numa unidade ou pasta (só o primeiro nível, como o Explorador mostra ao entrar)."""
+        if re.search(r"\b(cnp|cnps|origus|planilha|excel|agenda|lembr|procur|abre|abrir)\b", p):
+            return None
+        if not (re.search(r"\b(quantas|quantos|quais|lista|listar|mostra|mostre|o que (tem|existe|ha))\b", p) and
+                re.search(r"\b(pastas?|arquivos?|itens|conteudo|tem dentro|tem na|tem no|existe na|existe no)\b", p)):
+            return None
+        onde, lugar, resto = self._onde(p)
+        raiz = None
+        raizes = [r for r, _, _ in (self.n.indice.locais() if self.n.indice else [])]
+        if onde in raizes or re.fullmatch(r"[A-Z]:\\", onde or ""):
+            raiz = onde
+        elif onde == "pc":
+            raiz = "C:\\"
+        # nome da pasta citada: "na engenharia", "dentro da pasta ateliê"
+        nome = ""
+        m = re.search(r"\b(?:na|no|da|do|dentro da|dentro do|em)\s+(?:pasta\s+)?([a-z0-9][a-z0-9 _\-]*)", resto)
+        if m:
+            nome = m.group(1)
+        lixo = r"\b(quantas|quantos|quais|lista|listar|mostra|mostre|o que|tem|ha|existe|existem|pastas?|arquivos?|itens|aba|" \
+               r"inicial|inicialmente|assim|que|voce|vc|entra|entrar|quando|logo|ao|na|no|da|do|de|dentro|primeira|tela|" \
+               r"mantiqueira|agora|hoje|e|a|o|os|as|nela|nele|conteudo)\b"
+        nome = re.sub(r"\s+", " ", re.sub(lixo, " ", nome)).strip()
+        alvo = raiz
+        if nome:
+            alvo = None
+            bases = [raiz] if raiz else raizes
+            for b in bases:                               # primeiro: pasta com esse nome logo na entrada da unidade
+                try:
+                    for e in os.scandir(b):
+                        if e.is_dir() and textutil.sem_acento(e.name.lower()).strip() == nome:
+                            alvo = e.path
+                            break
+                except OSError:
+                    continue
+                if alvo:
+                    break
+            if not alvo and self.n.indice:               # depois: no mapa de arquivos (a mais rasa)
+                ex, par = self.n.indice.buscar(nome, raiz or "tudo", limite=30)
+                pastas = sorted([r for r in ex if r["eh_pasta"] and textutil.sem_acento(r["nome"].lower()) == nome],
+                                key=lambda r: r["caminho"].count("\\")) or \
+                    sorted([r for r in ex if r["eh_pasta"]], key=lambda r: r["caminho"].count("\\"))
+                if pastas:
+                    alvo = pastas[0]["caminho"]
+            if not alvo:
+                return f"Não encontrei a pasta \"{nome}\"{lugar}, {self._trat()}."
+        if not alvo:
+            return None                                   # não disse onde: deixa outra parte responder
+        try:
+            itens = list(os.scandir(alvo))
+        except OSError as e:
+            return f"Não consegui abrir {alvo}, {self._trat()}. Pode ser que a rede esteja desconectada ({e.strerror})."
+
+        def visivel(e):
+            if e.name.startswith(("$", "~$", ".")) or e.name.lower() in ("system volume information", "desktop.ini", "thumbs.db"):
+                return False
+            try:
+                return not (e.stat().st_file_attributes & 0x6)    # oculto ou de sistema
+            except (OSError, AttributeError):
+                return True
+        itens = [e for e in itens if visivel(e)]
+        pastas = sorted([e.name for e in itens if e.is_dir()], key=str.lower)
+        arqs = sorted([e.name for e in itens if not e.is_dir()], key=str.lower)
+        rot = os.path.basename(alvo.rstrip("\\")) or (lugar.strip().replace("no ", "", 1) or alvo)
+        if raiz and alvo == raiz:
+            rot = (lugar.strip()[3:] if lugar.strip().startswith("no ") else lugar.strip()) or alvo
+            rot = f"{rot} ({alvo[:2]})"
+        self.ultimo_caminho = alvo
+        self.n.detalhe_texto = "\n".join([alvo] + [f"[pasta] {x}" for x in pastas] + [f"{x}" for x in arqs])
+        fp = ("nenhuma pasta" if not pastas else ("uma pasta" if len(pastas) == 1 else f"{len(pastas)} pastas"))
+        fa = ("nenhum arquivo" if not arqs else ("um arquivo" if len(arqs) == 1 else f"{len(arqs)} arquivos"))
+        lista_p = (": " + ", ".join(pastas[:12]) + (f", e mais {len(pastas) - 12}" if len(pastas) > 12 else "")) if pastas else ""
+        lista_a = (": " + ", ".join(arqs[:5]) + (f", e mais {len(arqs) - 5}" if len(arqs) > 5 else "")) if arqs else ""
+        return f"Ao entrar em {rot} há {fp}{lista_p}. E {fa}{lista_a}."
 
     # ------------------------------------------------------------------ ler outra janela
     def ler_janela(self, p, original):

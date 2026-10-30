@@ -706,6 +706,37 @@ def _():
     print("::notice title=CNP períodos::" + " %0A".join(f"{q} → {a[:120]}" for q, a in r.items()), flush=True)
 
 
+@etapa("pastas: 'quantas pastas tem no File Projetos?' e 'o que tem na Engenharia?'")
+def _():
+    import shutil
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.indice import Indice, NOMES
+    from mantiqueira.intencoes import Intencoes
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_pastas.db"); n.olhos = None; n.sistemas = None; n.detalhe_texto = ""
+    n.contexto_extra = ""; n.parar_fala = lambda: None; n.cerebro = None; n.memoria = None; n.frases = None
+    n.indice = Indice(n)
+    Z = paths.DADOS / "teste_unidade_z"
+    shutil.rmtree(Z, ignore_errors=True)
+    for d in ["ATELIÊ", "CHINESA", "ENGENHARIA", "Nova pasta", "ENGENHARIA/2026", "ENGENHARIA/LASER", "ATELIÊ/TESTE MÁYRA"]:
+        (Z / d).mkdir(parents=True, exist_ok=True)
+    (Z / "Captura de tela.png").write_bytes(b"x")
+    raiz = str(Z) + os.sep
+    NOMES[raiz] = "File-Projetos"
+    n.indice.locais = lambda: [(raiz, "rede", "File-Projetos")]
+    it = Intencoes(n)
+    r1 = it.tratar("no file projetos tem quantas pastas na aba inicial?", [])
+    r2 = it.tratar("na engenharia no file projetos tem quais pastas inicialmente?", [])
+    assert "4 pastas" in r1 and "ENGENHARIA" in r1 and "um arquivo" in r1, r1
+    assert "2 pastas" in r2 and "LASER" in r2, r2
+    print(f"::notice title=Pastas::{r1} %0A{r2}", flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt
