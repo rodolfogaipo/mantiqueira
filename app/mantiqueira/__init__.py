@@ -1,2 +1,2 @@
 """Mantiqueira — assistente pessoal 100% offline."""
-VERSAO = "1.4.8"
+VERSAO = "1.4.9"

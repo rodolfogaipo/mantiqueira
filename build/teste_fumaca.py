@@ -597,6 +597,64 @@ def _():
     print("::notice title=CNP conversa::" + " %0A".join([r1, r2, r3, r4, r5]), flush=True)
 
 
+@etapa("sistema de CNPs igual ao Órigus (DataTables no servidor): lê todos os registros")
+def _():
+    import threading
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+    from urllib.parse import urlparse, parse_qs
+    from mantiqueira.config import Config
+    from mantiqueira.sistemas_web import SistemasWeb
+    pasta = Path(__file__).with_name("teste_dt")
+    dados = []
+    for i in range(865):
+        id_ = 970 - i
+        dados.append({"id": id_, "produto": "banqueta miches" if id_ == 952 else f"PRODUTO {id_}", "similar": "",
+                      "pedido": 121861 if id_ == 952 else 120000 + i, "linha": "banqueta", "carga": None, "qtd": 6,
+                      "dataPrevista": "2026-12-07T12:00:00" if id_ == 952 else None, "aprovacao": "2026-10-28T15:06:00",
+                      "setores": [{"nome": "TUBULAR", "st": "pendente"}], "status": "em análise pcp",
+                      "criadoPor": {"nome": "Ana Laura Alves Ribeiro"}, "dataCriacao": "2026-10-28T14:56:00"})
+
+    class H(SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=str(pasta), **k)
+
+        def do_GET(self):
+            u = urlparse(self.path)
+            if u.path == "/cnp/cnps" and "draw" in u.query:
+                q = parse_qs(u.query)
+                ini, tam = int(q.get("start", ["0"])[0]), min(100, int(q.get("length", ["15"])[0]))   # servidor limita a 100
+                corpo = json.dumps({"draw": int(q["draw"][0]), "recordsTotal": len(dados), "recordsFiltered": len(dados),
+                                    "data": dados[ini:ini + tam]}).encode()
+                self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+                self.wfile.write(corpo)
+                return
+            if u.path == "/cnp/cnps":
+                self.path = "/pagina.html"
+            return super().do_GET()
+
+        def log_message(self, *a):
+            pass
+    srv = HTTPServer(("127.0.0.1", 18799), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.detalhe_texto = ""; n.falar_aviso = lambda t: None
+    sw = SistemasWeb(n)
+    s = {"nome": "CNPs", "url": "http://127.0.0.1:18799/cnp/cnps", "palavras": "cnp"}
+    try:
+        d = sw.ler(s, cache_seg=0)
+    finally:
+        srv.shutdown()
+    assert len(d["linhas"]) == 865, len(d["linhas"])
+    r = sw.responder(s, d, "que dia foi cadastrado a banqueta miches")
+    assert "28/10/2026" in r and "banqueta" in r, r
+    r2 = sw.responder(s, d, "qual a data prevista da banqueta miches")
+    assert "07/12/2026" in r2, r2
+    print(f"::notice title=Sistema igual ao Órigus::{len(d['linhas'])} registros lidos — {r} %0A{r2}", flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

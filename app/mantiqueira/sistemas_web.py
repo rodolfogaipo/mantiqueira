@@ -113,6 +113,60 @@ JS_MAIS_POR_PAGINA = r"""
 })()
 """
 
+# Lê TODOS os registros direto da fonte da tabela, quando a página usa DataTables (como o Órigus):
+# pede ao próprio sistema a lista completa, com a mesma sessão, sem mexer em filtros nem em páginas.
+# Cada célula sai com o texto exatamente como aparece na tela (usando as regras de exibição da própria tabela).
+JS_DATATABLES = r"""
+(async function(){
+  var $ = window.jQuery;
+  if (!$ || !$.fn || !$.fn.dataTable) return JSON.stringify({erro: 'sem DataTables'});
+  var tabs = $.fn.dataTable.tables();
+  if (!tabs.length) return JSON.stringify({erro: 'nenhuma tabela DataTables'});
+  var melhor = null;
+  for (var i = 0; i < tabs.length; i++){ var dti = $(tabs[i]).DataTable(); if (!melhor || dti.columns().count() > melhor.columns().count()) melhor = dti; }
+  var dt = melhor, st = dt.settings()[0];
+  function texto(h){ var d = document.createElement('div'); d.innerHTML = String(h == null ? '' : h).replace(/<br\s*\/?>/gi, ' '); return (d.innerText || d.textContent || '').replace(/\s+/g, ' ').trim(); }
+  var cab = st.aoColumns.map(function(c){ return texto(c.sTitle); });
+  var dados = [], total = null;
+  if (st.oFeatures.bServerSide){
+    var url = dt.ajax.url() || (st.ajax && st.ajax.url) || st.sAjaxSource;
+    var base = dt.ajax.params() || {};
+    var tipo = (st.ajax && st.ajax.type) || 'GET';
+    var pedido = $.extend(true, {}, base);
+    pedido.start = 0; pedido.length = 100000; pedido.draw = (pedido.draw || 1) + 1000;
+    if (pedido.search) pedido.search.value = '';
+    (pedido.columns || []).forEach(function(c){ if (c.search) c.search.value = ''; });
+    var r = await $.ajax({url: url, data: pedido, type: tipo, dataType: 'json'});
+    var src = st.sAjaxDataProp !== undefined ? st.sAjaxDataProp : 'data';
+    dados = (src ? (r[src] || r.data || r.aaData) : r) || [];
+    total = r.recordsTotal || r.iTotalRecords || null;
+    if (total && dados.length < total){
+      // o servidor limitou o tamanho: busca o resto em blocos
+      var passo = dados.length || 100, ini = dados.length;
+      while (ini < total && ini < 20000){
+        var p2 = $.extend(true, {}, pedido); p2.start = ini; p2.length = passo; p2.draw += 1;
+        var r2 = await $.ajax({url: url, data: p2, type: tipo, dataType: 'json'});
+        var d2 = (src ? (r2[src] || r2.data || r2.aaData) : r2) || [];
+        if (!d2.length) break;
+        dados = dados.concat(d2); ini += d2.length;
+      }
+    }
+  } else {
+    dados = dt.rows().data().toArray();
+    total = dados.length;
+  }
+  var linhas = dados.map(function(row, ri){
+    return st.aoColumns.map(function(c, ci){
+      try { var v = c.fnGetData(row, 'display', {settings: st, row: ri, col: ci});
+            if (v === row || (v && typeof v === 'object')) v = c.sDefaultContent || '';
+            var t = texto(v); return t === '[object Object]' ? '' : t; }
+      catch (e) { try { return texto(row[c.mData]); } catch (e2) { return ''; } }
+    });
+  });
+  return JSON.stringify({cab: cab, linhas: linhas, total: total, servidor: !!st.oFeatures.bServerSide});
+})()
+"""
+
 # diagnóstico da página (vai para o log)
 JS_DIAG = r"""
 (function(){
@@ -369,16 +423,27 @@ class SistemasWeb:
                             return {"login": True}
                         raise RuntimeError("a página abriu, mas não mostrou a lista")
                     self.precisa_login.discard(nome)
-                    if self._avaliar(page, JS_LIMPAR, json_=False):
+                    # 1º caminho (o certo): a lista completa direto da fonte da tabela, sem mexer em nada na tela
+                    api = self._avaliar(page, JS_DATATABLES)
+                    if api and api.get("linhas"):
+                        cab, linhas = api["cab"], api["linhas"]
+                        pag = 1
+                        log.info("sistema %s: lidos %d registros direto da tabela (total informado: %s)", nome,
+                                 len(linhas), api.get("total"))
+                        res = {"login": False, "cab": cab, "linhas": linhas, "paginas": 1, "hora": time.strftime("%H:%M"),
+                               "total": api.get("total")}
+                        self.cache[nome] = (time.time(), res)
+                        self.ultimos[nome] = res
+                        log.info("sistema %s: colunas %s", nome, " | ".join(cab))
+                        for l in linhas[:2]:
+                            log.info("sistema %s: exemplo %s", nome, " | ".join(l)[:400])
+                        return res
+                    log.info("sistema %s: leitura direta indisponível (%s); lendo a tela", nome, (api or {}).get("erro"))
+                    # 2º caminho: ler a tela página por página (sem mexer em filtros nem em seletores)
+                    if False and self._avaliar(page, JS_LIMPAR, json_=False):
                         log.info("sistema %s: filtros limpos", nome)
                         time.sleep(3)
-                    if self._avaliar(page, JS_TAMANHO_ABRIR, json_=False):
-                        time.sleep(0.8)
-                        mx = self._avaliar(page, JS_TAMANHO_MAIOR, json_=False)
-                        log.info("sistema %s: registros por página → %s", nome, mx)
-                        time.sleep(3)
-                    elif self._avaliar(page, JS_MAIS_POR_PAGINA, json_=False):
-                        time.sleep(2.5)
+                    # (não mexe em seletores: um "Criado por" com números já filtrou a lista por engano)
                     log.info("sistema %s: depois de preparar %s", nome, self._avaliar(page, JS_DIAG, json_=False))
                     cab, linhas, chaves = [], [], set()
                     ultimo = self._coletar(page, chaves, linhas, cab)
@@ -693,12 +758,13 @@ class SistemasWeb:
             col = campo if campo in ("prevista", "aprovacao", "criacao") else ("criacao" if "criacao" in m else "prevista")
             escolhidas = [l for l in escolhidas if self._data(v(l, col)) == alvo_data]
             rot = {"criacao": "criados", "aprovacao": "aprovados pela gerência", "prevista": "com data prevista para"}[col]
+            rot1 = {"criacao": "criado", "aprovacao": "aprovado pela gerência", "prevista": "com data prevista para"}[col]
             quando = alvo_data.strftime("%d/%m/%Y")
             if not escolhidas:
-                return f"Nenhum CNP {rot} {quando}, {self.n.cfg['tratamento']}. Li {len(linhas)} CNPs no sistema."
+                return f"Nenhum CNP {rot1} {quando}, {self.n.cfg['tratamento']}. Li {len(linhas)} CNPs no sistema."
             self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:30])
             if len(escolhidas) == 1:
-                return f"Um CNP {rot} {quando}: {ficha(escolhidas[0])}."
+                return f"Um CNP {rot1} {quando}: {ficha(escolhidas[0])}."
             return (f"{len(escolhidas)} CNPs {rot} {quando}: " + "; ".join(nome(l) for l in escolhidas[:6])
                     + ". A lista completa está na tela.")
         if termos:

@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><script src="/jquery.min.js"></script>
+<script src="/jquery.dataTables.min.js"></script></head><body>
+<div>Criado por <select id="criadoPor"><option value="">Todos os usuários</option><option value="3">Ana Laura</option><option value="57">Robson Adeilton dos Santos</option></select>
+<button id="limpar">Limpar</button></div>
+<table id="tabelaCnp"><thead><tr><th>ID</th><th>Produto</th><th>Pedido</th><th>Linha</th><th>Carga</th><th>Qtd Peças</th><th>Data Prevista</th><th>Aprovação Gerência</th><th>Setores</th><th>Status Geral</th><th>Criado por</th><th>Data Criação</th><th>Ações</th></tr></thead></table>
+<script>
+function br(d){ if(!d) return '-'; var x=new Date(d); var p=function(n){return ('0'+n).slice(-2)}; var s=p(x.getDate())+'/'+p(x.getMonth()+1)+'/'+x.getFullYear(); if(String(d).indexOf('T')>0) s+='<br>'+p(x.getHours())+':'+p(x.getMinutes()); return s; }
+$('#tabelaCnp').DataTable({serverSide:true, processing:true, pageLength:15, lengthMenu:[15,25,50,100], order:[[0,'desc']],
+  ajax:{url:'/cnp/cnps', type:'GET', data:function(d){ d.criadoPor=$('#criadoPor').val(); }},
+  columns:[{data:'id'},{data:'produto', render:function(v,t,r){return v+'<br><small>Similar: '+(r.similar||v)+'</small>';}},
+    {data:'pedido'},{data:'linha'},{data:'carga', render:function(v){return v||'-';}},{data:'qtd'},
+    {data:'dataPrevista', render:br},{data:'aprovacao', render:br},
+    {data:'setores', orderable:false, render:function(v){return v.map(function(s){return '<span class="badge">'+s.nome+': <i>'+s.st+'</i></span>';}).join('<br>');}},
+    {data:'status', render:function(v){return '<span class="badge">'+v+'</span>';}},{data:'criadoPor.nome'},{data:'dataCriacao', render:br},
+    {data:null, orderable:false, defaultContent:'<button>edit</button>'}]});
+</script></body></html>
