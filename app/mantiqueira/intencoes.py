@@ -487,17 +487,59 @@ class Intencoes:
             return None
         if not re.search(r"\b(abr[ea]|abrir|pode abrir|sim|isso|esse|essa|esse mesmo|o primeiro|o segundo|o terceiro|"
                          r"a primeira|a segunda|a pasta|mostra a pasta|onde fica a pasta|primeiro|segundo|terceiro|quarto|quinto|"
-                         r"ultimo|1|2|3|4|5)\b", p):
+                         r"ultimo|todos|todas|ambos|ambas|\d{1,2})\b", p):
             return None
         sobra = re.sub(r"\b(abr[ea]|abrir|pode|sim|isso|esse|essa|este|esta|mesmo|o|a|os|as|pra|para|mim|me|por|favor|pasta|"
-                       r"mostra|onde|fica|dele|dela|ele|ela|entao|agora|ai|la|logo|arquivo|numero|n|mantiqueira|ok|quero|" + "|".join(ORDINAIS) + r")\b", " ", p)
+                       r"mostra|onde|fica|dele|dela|ele|ela|eles|elas|entao|agora|ai|la|logo|arquivo|arquivos|numero|n|mantiqueira|ok|"
+                       r"quero|que|voce|vc|todos|todas|tudo|ambos|ambas|dois|duas|tres|e|de|uma|vez|eles|lista|da|do|"
+                       r"\d{1,2}|" + "|".join(ORDINAIS) + r")\b", " ", p)
         if len(sobra.split()) > 1:
             return None
-        idx = 0
-        for palavra, i in ORDINAIS.items():
-            if re.search(r"\b" + palavra + r"\b", p):
-                idx = i
-                break
+        # "abre todos" / "abre os dois" / "abre o 1 e o 3"
+        escolhidos = None
+        self._idx_unico = None
+        if re.search(r"\b(todos|todas|tudo|ambos|ambas)\b", p):
+            escolhidos = list(range(len(self.resultados)))
+        else:
+            mm = re.search(r"\b(?:os|as) (dois|duas|tres) primeir[oa]s\b|\b(?:os|as) (dois|duas|tres)\b", p)
+            if mm:
+                k = {"dois": 2, "duas": 2, "tres": 3}[mm.group(1) or mm.group(2)]
+                escolhidos = list(range(min(k, len(self.resultados))))
+            else:
+                nums = []
+                for m_ in re.finditer(r"\b(" + "|".join(sorted(ORDINAIS, key=len, reverse=True)) + r"|\d{1,2})\b", p):
+                    w = m_.group(1)
+                    i_ = ORDINAIS.get(w, int(w) - 1 if w.isdigit() else None)
+                    if i_ is not None and i_ not in nums:
+                        nums.append(i_)
+                if len(nums) > 1:
+                    escolhidos = nums
+                elif len(nums) == 1:
+                    self._idx_unico = nums[0]
+        if escolhidos is not None:
+            lista = []
+            for i_ in escolhidos:
+                try:
+                    lista.append(self.resultados[i_])
+                except IndexError:
+                    pass
+            if not lista:
+                return f"Só achei {len(self.resultados)} resultados, {self._trat()}."
+            lista = lista[:15]
+            for r in lista:
+                if "pasta" in p:
+                    subprocess.Popen(["explorer", "/select,", r["caminho"]])
+                else:
+                    os.startfile(r["caminho"])
+                time.sleep(0.3)
+            self.ultimo_caminho = lista[-1]["caminho"]
+            self.resultados = []
+            extra = " (abri os 15 primeiros)" if len(escolhidos) > 15 else ""
+            return f"Abrindo {len(lista)} arquivos{extra}: " + "; ".join(r["nome"] for r in lista) + "."
+        idx = getattr(self, "_idx_unico", None)
+        self._idx_unico = None
+        if idx is None:
+            idx = 0
         try:
             r = self.resultados[idx]
         except IndexError:
@@ -553,7 +595,8 @@ class Intencoes:
         exts, resto = self._tipo(resto)
         resto = RX_ABRIR.sub(" ", resto)
         consulta = re.sub(r"\s+", " ", RX_LIXO.sub(" ", resto)).strip()
-        consulta = re.sub(r"\b(o|a|arquivo|pra|para|mim|favor|por)\b", " ", consulta).strip()
+        consulta = re.sub(r"\b(o|a|arquivo|arquivos|pra|para|mim|favor|por|todos|todas|quero|que|voce|vc)\b", " ", consulta)
+        consulta = re.sub(r"\s+", " ", consulta).strip()
         sem_pronome = re.sub(r"\s+", " ", RX_PRONOME.sub(" ", consulta)).strip()
         b = getattr(self, "ultima_busca", None)
         if len(sem_pronome) < 2 and b and time.time() - self.quando_busca < 900:
@@ -567,7 +610,8 @@ class Intencoes:
         if len(consulta) < 2:
             return f"Qual arquivo o {self._trat()} quer que eu abra?"
         tipo_txt = (" " + NOME_TIPO.get(exts[0], "")) if exts else ""
-        exatos, parecidos = ix.buscar(consulta, onde, limite=60 if dicas else 6, exts=exts) if ix else ([], [])
+        todos = bool(re.search(r"\b(todos|todas)\b", p))
+        exatos, parecidos = ix.buscar(consulta, onde, limite=60 if (dicas or todos) else 6, exts=exts) if ix else ([], [])
         if dicas:
             exatos = [r for r in exatos if self._na_pasta(r["caminho"], dicas)][:6]
             parecidos = [r for r in parecidos if self._na_pasta(r["caminho"], dicas)][:6]
@@ -580,6 +624,14 @@ class Intencoes:
         self.consulta, self.quando_busca = consulta, time.time()
         self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
                              "achou": len(exatos), "parecidos": len(parecidos)}
+        if re.search(r"\b(todos|todas)\b", p) and exatos:
+            # "abre todos os PDFs da espreguiçadeira aura"
+            lista = exatos[:15] if len(exatos) <= 15 else exatos[:15]
+            for r in lista:
+                os.startfile(r["caminho"])
+                time.sleep(0.3)
+            self.resultados = []
+            return f"Abrindo {len(lista)} arquivos: " + "; ".join(r["nome"] for r in lista) + "."
         # nome do arquivo igual ao que ele disse (sem "PLANO DE CORTE…" e afins): é esse
         iguais = [r for r in exatos if not r["eh_pasta"] and
                   re.sub(r"\s+", " ", textutil.sem_acento(os.path.splitext(r["nome"])[0].lower())).strip() == consulta]

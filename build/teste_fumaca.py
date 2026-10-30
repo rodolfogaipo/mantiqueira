@@ -760,7 +760,21 @@ def _():
     assert abertos[-1].endswith("PLANO DE CORTE ESPREGUIÇADEIRA ALEMANHA.PDF"), (r7, abertos)
     r8 = it.tratar("abre a pasta impressos da espreguiçadeira alemanha", [])
     assert abertos[-1].replace("\\", "/").endswith("ESPREGUIÇADEIRA ALEMANHA/IMPRESSOS"), (r8, abertos)
-    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8}", flush=True)
+    d2 = Z / "ENGENHARIA/PROJETOS/ESPREGUIÇADEIRA AURA/IMPRESSOS"
+    d2.mkdir(parents=True, exist_ok=True)
+    for f in ["ESPREGUIÇADEIRA AURA 1,70X0,63X0,36H.pdf", "BASE ESPREGUIÇADEIRA AURA.pdf", "ASSENTO ESPREGUIÇADEIRA AURA.pdf",
+              "ENCOSTO ESPREGUIÇADEIRA AURA.pdf"]:
+        (d2 / f).write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    antes = len(abertos)
+    r9 = it.tratar("abra todos", [])
+    assert len(abertos) - antes == 4, (r9, abertos[antes:])
+    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    antes = len(abertos)
+    r10 = it.tratar("abre o 2 e o 4", [])
+    assert len(abertos) - antes == 2, (r10, abertos[antes:])
+    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10}", flush=True)
 
 
 @etapa("conversas de teste (secretário)")
