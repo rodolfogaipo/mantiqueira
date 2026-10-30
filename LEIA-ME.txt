@@ -110,6 +110,37 @@ IMPRIMIR / PDF DE CNP
   não altera nada.
 - Depois de achar arquivos: "imprime todos" / "imprime o 2".
 
+PROGRAMAS E COMANDOS DO COMPUTADOR
+- "abre o SolidWorks", "abre o Excel", "abre o Gaipo Nest", "abre a calculadora",
+  "abre o navegador". Se já estiver aberto, ele só traz para a frente.
+  Para outro programa instalado: "abre o programa <nome>".
+- "fecha o Excel" (igual a clicar no X: se tiver algo sem salvar, o programa
+  pergunta), "fecha essa janela", "vai para o SolidWorks", "minimiza o Excel",
+  "minimiza tudo", "quais programas estão abertos?".
+- "digita Bom dia, Robson" (escreve na janela em que o senhor está),
+  "aperta control s", "aperta enter", "aperta alt tab".
+- "aumenta o volume do computador", "volume em 30", "muta o computador",
+  "tira o computador do mudo". ("fala mais alto" continua sendo a voz dele.)
+- "bloqueia o computador", "tira um print" (salva em Imagens\Mantiqueira).
+- "desliga o computador" / "reinicia o computador": ele pergunta antes; só
+  faz depois do "sim" e espera 30 segundos. "cancela o desligamento" cancela.
+- Ele nunca força o fechamento de um programa e nunca apaga nada.
+
+PEÇAS SIMPLES NO SOLIDWORKS
+- "faz um cubo de 100 no SolidWorks"
+- "faz um bloco de 200 por 100 por 50"
+- "faz uma chapa de 1200 por 600 com 3 de espessura"
+- "faz uma chapa de 300 por 200 com 5 de espessura com 4 furos de 8 nos cantos
+  a 20 mm da borda" / "... com um furo de 50 no centro"
+- "faz um cilindro de 40 por 200" (diâmetro por comprimento)
+- "faz um tubo de 50 por 30 com 1,5 de parede e 800 de comprimento"
+- "faz um tubo redondo de 50 com 2 de parede e 600 de comprimento"
+- "faz um metalon 20x20 parede 1,2 comprimento 1000"
+- Medidas em milímetros (pode dizer "cm" ou "metros"). Se faltar medida, ele
+  pergunta e o senhor responde só o número. A peça abre NOVA e sem salvar;
+  ele nunca mexe numa peça que já estava aberta. Se o SolidWorks estiver
+  fechado, ele abre primeiro (demora um pouco).
+
 AVISO DE CNP
 - Com o login feito, a cada 15 minutos (das 6h às 20h) ele confere o
   sistema, só lendo, e avisa CNP novo e CNP com data prevista para hoje

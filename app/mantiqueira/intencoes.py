@@ -100,8 +100,8 @@ class Intencoes:
 
     def _tratar(self, pergunta, historico):
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
-        for f in (self.parar, self.imprimir_pedido, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
-                  self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
+        for f in (self.confirmar_energia, self.parar, self.imprimir_pedido, self.computador, self.peca_solidworks, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
+                  self.programa, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
                   self.conteudo_pasta, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
                 r = f(p, pergunta)
@@ -109,6 +109,8 @@ class Intencoes:
                 log.exception("intenção %s", f.__name__)
                 r = None
             if r:
+                if f != self.peca_solidworks:
+                    self._peca_pendente = None
                 if f in (self.abrir_pedido, self.buscar, self.conteudo_pasta) and getattr(self, "_acao", "abrir") == "abrir":
                     self._acao_lista, self._impressora_lista = "abrir", None     # lista nova de abrir
                 return r
@@ -125,6 +127,7 @@ class Intencoes:
             return None                                     # "esquece que..." é pedido de memória
         self.n.parar_fala()
         self.resultados = []
+        self._peca_pendente = None
         c = getattr(self.n, "cerebro", None)
         if c:
             c.lembrete_pendente = None
@@ -1139,3 +1142,185 @@ class Intencoes:
             return f"O {alvo} está minimizado ou não deu para ler a janela. Deixe ele aberto na tela e peça de novo."
         self.n.contexto_extra = f"TEXTO DA JANELA '{titulo}':\n{texto[:4000]}"
         return None                             # a IA responde usando o texto lido
+
+    # ------------------------------------------------------------------ programas e comandos do computador
+    def _avisar(self, texto):
+        try:
+            self.n.ultima["assistente"] = texto
+            if self.n.voz and not self.n.em_silencio():
+                self.n.voz.falar(texto)
+        except Exception:
+            pass
+
+    def confirmar_energia(self, p, original):
+        """Resposta ao "tem certeza que quer desligar?"."""
+        c = getattr(self, "_confirmar", None)
+        if not c:
+            return None
+        self._confirmar = None
+        if time.time() - c["t"] > 60:
+            return None
+        if re.fullmatch(r"(mantiqueira )?(sim|pode|pode sim|confirmo|confirma|confirmado|isso|isso mesmo|com certeza|claro|"
+                        r"pode (desligar|reiniciar)|(desliga|desligar|reinicia|reiniciar)( sim)?|manda ver|faz isso)"
+                        r"( sim| mantiqueira| senhor| por favor| agora)*", p):
+            from . import programas
+            if programas.energia(c["acao"]):
+                self._energia_t = time.time()
+                verbo = "desligar" if c["acao"] == "desligar" else "reiniciar"
+                return (f"Certo, {self._trat()}. O computador vai {verbo} em 30 segundos. Salve o que estiver aberto. "
+                        f"Para cancelar, diga: cancela o desligamento.")
+            return f"O Windows não aceitou o comando, {self._trat()}. Não desliguei nada."
+        if re.search(r"\b(nao|cancela|cancele|deixa|esquece|para)\b", p):
+            return f"Tudo bem, {self._trat()}. Não {'desliguei' if c['acao'] == 'desligar' else 'reiniciei'}."
+        return None
+
+    def computador(self, p, original):
+        from . import programas
+        t = self._trat()
+        # cancelar desligamento
+        if re.search(r"\b(cancela|cancele|cancelar|para|nao)\b.*\b(desligamento|desligar|deslig\w*|reinici\w*)\b", p) and \
+                (time.time() - getattr(self, "_energia_t", 0) < 120 or re.search(r"\bdesligamento\b", p)):
+            programas.energia("cancelar")
+            self._energia_t = 0
+            return f"Cancelado, {t}. O computador não vai mais desligar."
+        # desligar / reiniciar: sempre pergunta antes
+        m = re.search(r"\b(desliga|desligue|desligar|reinicia|reinicie|reiniciar)\s+(o |a )?(computador|pc|maquina|windows)\b", p)
+        if m and not re.search(r"\b(nao|como|quando|por que|porque)\b", p):
+            acao = "desligar" if m.group(1).startswith("deslig") else "reiniciar"
+            self._confirmar = {"acao": acao, "t": time.time()}
+            return f"Tem certeza que quer {acao} o computador, {t}? Diga sim para confirmar."
+        if re.search(r"\b(bloqueia|bloqueie|bloquear|trava|trave|travar)\s+(o |a )?(computador|pc|tela|maquina|windows)\b", p):
+            programas.bloquear()
+            return f"Computador bloqueado, {t}."
+        # volume do Windows (o volume da minha voz continua em "fala mais alto/baixo")
+        if re.search(r"\b(volume|som)\b.*\b(computador|pc|windows|geral|do sistema)\b|\b(computador|pc)\b.*\bvolume\b", p) or \
+                re.fullmatch(r"(mantiqueira )?(coloca o |poe o |deixa o )?volume (em|no|para|pra|a) \d{1,3}( por cento|%)?", p):
+            mv = re.search(r"\bvolume\b.*?\b(?:em|no|para|pra|a)\s+(\d{1,3})\b", p)
+            if mv:
+                programas.volume("definir", int(mv.group(1)))
+                return f"Volume do computador em {min(100, int(mv.group(1)))} por cento, {t}."
+            if re.search(r"\b(aumenta|aumente|sobe|suba|mais alto|aumentar)\b", p):
+                programas.volume("mais")
+                return f"Aumentei o volume do computador, {t}."
+            if re.search(r"\b(abaixa|abaixe|diminui|diminua|baixa|mais baixo|diminuir)\b", p):
+                programas.volume("menos")
+                return f"Abaixei o volume do computador, {t}."
+        if re.search(r"\b(muta|mute|silencia|silencie)\s+(o )?(computador|pc|windows)\b|"
+                     r"\b(tira|tire|desliga|corta)\s+(o )?(som|audio)\s+do\s+(computador|pc|windows)\b|"
+                     r"\b(tira|tire)\s+(o computador |o pc )?do mudo\b|\bdesmuta\b|\b(volta|liga)\s+o\s+(som|audio)\s+do\s+(computador|pc)\b", p):
+            liga = bool(re.search(r"\bdo mudo\b|\bdesmuta\b|\b(volta|liga)\b", p))
+            if liga == getattr(self, "_mudo", False) or not hasattr(self, "_mudo"):
+                programas.volume("mudo")
+            self._mudo = not liga
+            return f"Tirei o computador do mudo, {t}." if liga else f"Coloquei o computador no mudo, {t}."
+        # print
+        if re.search(r"\b(tira|tire|tirar|faz|faca|salva|salve)\s+(um |uma )?(print|captura|foto da tela)\b|"
+                     r"^(print( da tela)?|captura( a)? tela)$", p):
+            arq = programas.print_tela()
+            self.ultimo_caminho = arq
+            return f"Tirei um print da tela e salvei em Imagens, Mantiqueira, {t}."
+        # área de trabalho / janela atual
+        if re.search(r"\b(minimiza|minimize|esconde|esconda)\s+(tudo|todas as janelas|todos)\b|\bmostra a area de trabalho\b", p):
+            programas.minimizar_tudo()
+            return f"Pronto, {t}."
+        if re.fullmatch(r"(mantiqueira )?(fecha|feche|fechar)\s+(essa|esta|a)\s+janela( ai| por favor| pra mim)*", p):
+            tt = programas.fechar_janela_atual()
+            if not tt:
+                return f"Não achei uma janela para fechar, {t}."
+            return f"Fechei a janela {textutil.curto(tt, 60)}. Se tinha algo sem salvar, ela pergunta antes."
+        # digitar
+        md = re.match(r"^\s*(?:mantiqueira[\s,]+)?(?:digita|digite|digitar|escreve a[ií]|escreva a[ií])\s*[:,]?\s+(.+)$",
+                      original.strip(), re.I | re.S)
+        if md:
+            texto = md.group(1).strip().strip('"“”')
+            jan = programas.digitar(texto)
+            return f"Digitei{(' no ' + textutil.curto(jan, 50)) if jan else ''}, {t}."
+        # teclas
+        mk = re.match(r"^(?:mantiqueira )?(?:aperta|aperte|apertar|pressiona|pressione|tecla|da um|de um)\s+(.+)$", p)
+        if mk:
+            combo = programas.combinacao(mk.group(1))
+            if combo:
+                jan = programas.apertar(combo)
+                return f"Apertei {combo.replace('+', ' + ')}{(' no ' + textutil.curto(jan, 50)) if jan else ''}, {t}."
+            return None
+        if re.search(r"\b(quais|que)\s+(programas|janelas|aplicativos)\b.*\b(abert[oa]s|rodando)\b", p):
+            lista = programas.abertos()
+            if not lista:
+                return f"Não há nenhum programa com janela aberta agora, {t}."
+            return f"Estão abertos {len(lista)} programas: " + ", ".join(lista[:12]) + "."
+        return None
+
+    def programa(self, p, original):
+        from . import programas
+        m = re.match(r"^(?:mantiqueira )?(abre|abra|abrir|inicia|inicie|iniciar|executa|execute|roda|rode|liga|ligue|"
+                     r"fecha|feche|fechar|encerra|encerre|sai do|sai da|"
+                     r"vai para|vai pro|vai pra|volta para|volta pro|volta pra|muda para|muda pro|muda pra|troca para|"
+                     r"troca pro|troca pra|mostra|mostre|traz|traga|minimiza|minimize|esconde|esconda)\s+(.+?)"
+                     r"(?:\s+(?:pra frente|para frente|pra mim|por favor|ai|agora))*$", p)
+        if not m:
+            return None
+        if self._apelido_na_frase(p):
+            return None                                         # apelido dele vale mais
+        verbo, alvo = m.group(1), m.group(2)
+        prog = programas.resolver(alvo, aceitar_qualquer=bool(re.search(r"\b(programa|aplicativo)\b", alvo)))
+        if not prog:
+            return None
+        nome, t = prog["nome"], self._trat()
+        art = "a" if nome in ("Calculadora",) else "o"
+        if verbo.startswith(("abr", "inic", "exec", "rod", "lig")):
+            r = programas.abrir(prog)
+            self.resultados = []
+            if r == "frente":
+                return f"{art.upper()} {nome} já estava {'aberta' if art == 'a' else 'aberto'}; trouxe para a frente, {t}."
+            if r == "aberto":
+                return f"Abrindo {art} {nome}."
+            return f"Não achei {art} {nome} instalado neste computador, {t}. Não abri nada."
+        if verbo.startswith(("fech", "encerr", "sai")):
+            n = programas.fechar(prog)
+            if not n:
+                return f"{art.upper()} {nome} não está {'aberta' if art == 'a' else 'aberto'}, {t}."
+            return (f"Fechei {art} {nome}, {t}. Se tinha algo sem salvar, ele pergunta antes de fechar."
+                    if n == 1 else f"Fechei {n} janelas do {nome}, {t}. Se tinha algo sem salvar, ele pergunta antes.")
+        if verbo.startswith(("minimi", "escond")):
+            n = programas.minimizar(prog)
+            return f"Minimizei {art} {nome}, {t}." if n else f"{art.upper()} {nome} não está aberto, {t}."
+        if programas.focar(prog):
+            return f"Pronto, {art} {nome} está na frente, {t}."
+        if verbo.startswith(("mostr",)):
+            return None                                         # "mostra o …" pode ser outra coisa
+        return f"{art.upper()} {nome} não está aberto, {t}. Se quiser, diga: abre {art} {nome}."
+
+    # ------------------------------------------------------------------ peças simples no SolidWorks
+    def peca_solidworks(self, p, original):
+        from . import solidworks_pecas as sp
+        texto = original
+        pend = getattr(self, "_peca_pendente", None)
+        if pend and time.time() - pend["t"] < 180 and re.search(r"\d", p) and not sp.RX_PEDIDO.search(sp._texto(p)) and \
+                not RX_ABRIR.search(p):
+            texto = pend["texto"] + " com " + original            # completa o que faltou ("100", "1,5 de parede")
+        tt = sp._texto(texto)
+        if not sp.RX_PEDIDO.search(tt):
+            return None
+        if re.search(r"\b(como|qual|quais|onde|porque|por que|o que)\b", tt) or textutil.pede_lembrete(p):
+            return None                                         # pergunta sobre como fazer: a IA explica
+        if not re.search(r"\d|\b(solidworks|solid)\b", tt) and not re.search(r"\b(cubo|chapa|cilindro|tubo|metalon)\b", tt):
+            return None
+        ped, erro = sp.entender(texto)
+        if not ped:
+            self._peca_pendente = {"texto": texto, "t": time.time()} if erro else None
+            return erro
+        self._peca_pendente = None
+        from . import sistema
+        aberto = True
+        try:
+            aberto = sistema.solidworks_aberto()
+        except Exception:
+            pass
+        self._avisar(f"Um instante, {self._trat()}. " + ("Estou fazendo a peça no SolidWorks." if aberto else
+                                                          "Vou abrir o SolidWorks primeiro; isso demora um pouco."))
+        try:
+            ok, msg = sp.criar(ped)
+        except Exception as e:
+            log.exception("peça no SolidWorks")
+            return f"Não consegui fazer a peça no SolidWorks, {self._trat()}. O SolidWorks respondeu: {str(e)[:120]}"
+        return msg

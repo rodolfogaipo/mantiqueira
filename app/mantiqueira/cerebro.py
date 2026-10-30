@@ -155,6 +155,7 @@ O TAMANHO da resposta acompanha a pergunta: pergunta simples ou conversa = 1 a 2
 OBEDIÊNCIA: faça SOMENTE o que ele pediu, nada além. Nunca tome iniciativa de abrir, exportar, apagar ou mudar nada. Se ele disser "não", "para" ou "cancela", apenas concorde.
 Você NÃO consegue fazer nada depois de responder: nunca diga "vou verificar", "vou procurar", "vou abrir" ou "um momento". Ou responda com os dados que estão abaixo, ou diga claramente que não tem essa informação.
 Você não abre arquivos nem procura arquivos: quem faz isso é o próprio programa quando ele diz "abre ..." ou "procura ...". Se ele quiser um arquivo, diga para ele pedir assim: "abre o PDF da mesa luna" ou "procura no computador ...".
+Você também não abre nem fecha programas, não digita, não aperta teclas e não desenha peças: quem faz isso é o próprio programa quando ele diz, por exemplo, "abre o SolidWorks", "fecha o Excel", "digita ...", "aperta control s" ou "faz um cubo de 100 no SolidWorks". Se ele pedir algo assim e você estiver respondendo, diga como ele deve pedir.
 Sobre o sistema da empresa (CNPs, Órigus): use SOMENTE os DADOS DO SISTEMA DA EMPRESA abaixo. Se não houver esses dados abaixo, diga que não conseguiu ler o sistema. Nunca invente CNP, produto, pedido ou data.
 Responda SEMPRE à ÚLTIMA mensagem do usuário. As mensagens anteriores são só contexto: nunca volte a responder uma pergunta antiga.
 Converse de verdade: se faltar informação para fazer o que ele pediu, PERGUNTE (por exemplo: para quando, a que horas, sobre o quê). Se ele só estiver conversando, converse.
@@ -272,6 +273,15 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 self._guardar(pergunta, real)
                 return real
             resposta = f"Não procurei esse arquivo ainda, {trat}. Diga: procura no computador e o nome do arquivo."
+        elif re.search(r"\b(abrindo|abri|abrirei|fechando|fechei|iniciando|iniciei)\b.{0,40}\b(solidworks|excel|word|autocad|"
+                       r"sketchup|chrome|edge|navegador|calculadora|programa|aplicativo|aspire|cypcut|gaipo|outlook|teams)\b|"
+                       r"\b(fiz|criei|desenhei|modelei|criando|desenhando|modelando|fazendo)\b.{0,30}\b(cubo|chapa|cilindro|tubo|"
+                       r"peca|bloco|esboco|extrusao)\b|\b(digitei|digitando|apertei|pressionei|desliguei|reiniciei|bloqueei)\b", r_sa):
+            # a IA "fingiu" mexer no computador: não fez nada, então não pode dizer que fez
+            log.info("IA fingiu uma ação no computador: %r", resposta)
+            resposta = (f"Não fiz isso, {trat}, porque não entendi o pedido como um comando. Peça assim: \"abre o "
+                        f"SolidWorks\", \"fecha o Excel\", \"digita ...\", \"aperta control s\" ou \"faz um cubo de 100 no "
+                        f"SolidWorks\".")
         elif acao == "nenhuma" and re.search(r"\b(vou (verificar|procurar|abrir|checar|olhar|buscar)|um momento|aguarde)\b", r_sa):
             resposta = f"Não tenho essa informação aqui, {trat}."
 

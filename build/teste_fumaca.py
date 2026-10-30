@@ -46,7 +46,7 @@ def _():
 @etapa("módulos da Mantiqueira")
 def _():
     from mantiqueira import config, db, textutil, sistema, ia, ouvido, voz, olhos, tela, cerebro, rotinas, nucleo, api  # noqa
-    from mantiqueira import indice, leitor, sistemas_web, memoria, frases, intencoes, holo  # noqa
+    from mantiqueira import indice, leitor, sistemas_web, memoria, frases, intencoes, holo, programas, solidworks_pecas  # noqa
     import pystray  # noqa
     import playwright.sync_api  # noqa
     n = nucleo.Nucleo()                      # o mesmo que o programa faz ao abrir
@@ -813,6 +813,167 @@ def _():
     r12 = it.tratar("imprime o pdf da espreguiçadeira alemanha na impressora pcp", [])
     assert impressos[-1] == ("ESPREGUIÇADEIRA ALEMANHA.PDF", "IMPRESSORA PCP"), (r12, impressos[-1])
     print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)
+
+
+@etapa("programas: abrir/fechar/digitar no Windows de verdade")
+def _():
+    import psutil
+    from mantiqueira import programas
+    assert programas.combinacao("control s") == "ctrl+s"
+    assert programas.combinacao("ctrl + shift + s") == "ctrl+shift+s"
+    assert programas.combinacao("alt f4") == "alt+f4"
+    assert programas.combinacao("seta para baixo") == "down"
+    assert programas.combinacao("o botão azul") is None
+    at = programas.atalhos(forcar=True)
+    print("   atalhos no menu Iniciar:", len(at), sorted(at)[:15], flush=True)
+    prog = programas.resolver("o bloco de notas")
+    assert prog and prog["abrir"] == "notepad.exe", prog
+    assert programas.resolver("relatorio da mesa luna") is None
+    assert programas.abrir(prog) == "aberto"
+    js = []
+    for _ in range(40):
+        js = programas.janelas_do(prog)
+        if js:
+            break
+        time.sleep(0.25)
+    assert js, "o Bloco de Notas não abriu"
+    assert programas.abrir(prog) == "frente"             # já aberto: só traz para frente
+    nota = "nao digitou (sessao sem tela)"
+    try:
+        programas.digitar("Teste Mantiqueira ção 123")
+        time.sleep(0.8)
+        import ctypes
+        u = ctypes.windll.user32
+        for h, _, _ in programas.janelas_do(prog):
+            ed = u.FindWindowExW(h, 0, "Edit", None) or u.FindWindowExW(h, 0, "RichEditD2DPT", None)
+            if ed:
+                b = ctypes.create_unicode_buffer(500)
+                u.SendMessageW(ed, 0x000D, 500, b)
+                nota = "digitou: " + b.value
+    except Exception as e:
+        nota = f"digitar falhou: {e}"
+    assert programas.fechar(prog) >= 1
+    time.sleep(1)
+    for pr in psutil.process_iter(["name"]):
+        if (pr.info["name"] or "").lower() == "notepad.exe":
+            pr.kill()                                     # só no teste (ficou perguntando se salva)
+    print(f"::notice title=Programas (Windows)::atalhos={len(at)}; {nota}", flush=True)
+
+
+@etapa("programas e peças do SolidWorks: frases → comandos")
+def _():
+    from mantiqueira import paths, programas, solidworks_pecas as sp
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.intencoes import Intencoes
+    import mantiqueira.sistema as S
+    feito = []
+    abertos_fake = {"excel.exe": [(1, "EXCEL.EXE", "Pasta1 - Excel")]}
+    orig = {k: getattr(programas, k) for k in ("janelas_do", "_frente", "_abrir_alvo", "atalhos", "fechar", "minimizar",
+                                                "digitar", "apertar", "volume", "energia", "bloquear", "print_tela",
+                                                "minimizar_tudo", "fechar_janela_atual", "abertos")}
+    orig_criar, orig_sw = sp.criar, S.solidworks_aberto
+
+    def janelas_do(prog):
+        return [j for pr in prog["procs"] for j in abertos_fake.get(pr, [])]
+    programas.janelas_do = janelas_do
+    programas._frente = lambda h: feito.append(("frente", h))
+    programas._abrir_alvo = lambda a: feito.append(("abrir", a)) or True
+    programas.atalhos = lambda forcar=False: {
+        "SOLIDWORKS 2025": "C:/sw2025.lnk", "SOLIDWORKS 2024": "C:/sw2024.lnk", "eDrawings 2025": "x",
+        "SOLIDWORKS Composer": "y", "Gaipo Nest": "C:/gn.lnk", "AutoCAD 2025 - Português (Brasil)": "C:/acad.lnk",
+        "Desinstalar Gaipo Nest": "z", "Audaces Vestuário": "C:/aud.lnk", "Relatórios": "C:/rel.lnk"}
+    programas.fechar = lambda prog: feito.append(("fechar", prog["nome"])) or len(janelas_do(prog))
+    programas.minimizar = lambda prog: len(janelas_do(prog))
+    programas.digitar = lambda t: feito.append(("digitar", t)) or "Sem título - Bloco de Notas"
+    programas.apertar = lambda c: feito.append(("apertar", c)) or "Pasta1 - Excel"
+    programas.volume = lambda a, v=None: feito.append(("volume", a, v))
+    programas.energia = lambda a: feito.append(("energia", a)) or True
+    programas.bloquear = lambda: feito.append(("bloquear",))
+    programas.print_tela = lambda: "C:/p.png"
+    programas.minimizar_tudo = lambda: feito.append(("min tudo",))
+    programas.fechar_janela_atual = lambda: "Pasta1 - Excel"
+    programas.abertos = lambda: ["Excel", "SolidWorks"]
+    sp.criar = lambda ped, sw=None: feito.append(("peca", ped)) or (True, "Pronto, fiz " + sp.descrever(ped) + ".")
+    S.solidworks_aberto = lambda: True
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_programas.db"); n.olhos = None; n.sistemas = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.parar_fala = lambda: None; n.cerebro = None; n.memoria = None
+    n.frases = None; n.indice = None; n.ultima = {}; n.voz = None; n.em_silencio = lambda: False
+    it = Intencoes(n)
+    relato = []
+
+    def diz(frase, esperado, resp=None):
+        feito.clear()
+        r = it.tratar(frase, [])
+        relato.append(f"{frase} → {r} {feito}")
+        assert (feito[-1] if feito else None) == esperado, (frase, r, feito)
+        if resp:
+            assert r and resp in r, (frase, r)
+        return r
+    try:
+        diz("abre o solidworks", ("abrir", "C:/sw2025.lnk"))
+        diz("liga o solidworks", ("abrir", "C:/sw2025.lnk"))
+        diz("abre o excel", ("frente", 1), "trouxe para a frente")
+        diz("abre o gaipo nest", ("abrir", "C:/gn.lnk"))
+        diz("abre o autocad", ("abrir", "C:/acad.lnk"))
+        diz("abre a calculadora", ("abrir", "calc.exe"))
+        diz("abre o programa audaces", ("abrir", "C:/aud.lnk"))
+        diz("fecha o excel", ("fechar", "Excel"), "Fechei o Excel")
+        diz("fecha o solidworks", ("fechar", "SolidWorks"), "não está aberto")
+        diz("vai para o excel", ("frente", 1))
+        diz("digita Bom dia, Robson!", ("digitar", "Bom dia, Robson!"))
+        diz("aperta control s", ("apertar", "ctrl+s"))
+        diz("aumenta o volume", None, "Falo mais alto")                   # a voz dele, como antes
+        diz("aumenta o volume do computador", ("volume", "mais", None))
+        diz("volume em 30", ("volume", "definir", 30))
+        diz("muta o computador", ("volume", "mudo", None))
+        diz("desliga o som", None, "Desliguei")                           # os bips, como antes
+        diz("desliga o computador", None, "Tem certeza")
+        diz("não", None, "Não desliguei")
+        diz("reinicia o computador", None, "Tem certeza")
+        diz("sim", ("energia", "reiniciar"), "30 segundos")
+        diz("cancela o desligamento", ("energia", "cancelar"))
+        diz("bloqueia o computador", ("bloquear",))
+        diz("minimiza tudo", ("min tudo",))
+        diz("faz um cubo de 100 no solidworks", ("peca", {"forma": "bloco", "palavra": "cubo", "c": 100.0, "l": 100.0, "a": 100.0}))
+        diz("faz um cubo", None, "De quantos")
+        diz("100", ("peca", {"forma": "bloco", "palavra": "cubo", "c": 100.0, "l": 100.0, "a": 100.0}))
+        diz("faz um tubo de 50 por 30 com 800 de comprimento", None, "parede")
+        diz("1,5 de parede", ("peca", {"forma": "tubo_q", "palavra": "tubo", "c": 50.0, "l": 30.0, "e": 1.5, "comp": 800.0}))
+        diz("faz uma chapa de 1200 por 600 com 3 de espessura com 4 furos de 10 nos cantos a 25 mm da borda",
+            ("peca", {"forma": "chapa", "palavra": "chapa", "c": 1200.0, "l": 600.0, "a": 3.0, "furo": 10.0,
+                      "qtd_furos": 4, "margem": 25.0}))
+        diz("faz um cilindro de 40 por 200", ("peca", {"forma": "cilindro", "palavra": "cilindro", "d": 40.0, "a": 200.0}))
+        diz("faz um tubo redondo de 50 com 2 de parede e 600 de comprimento",
+            ("peca", {"forma": "tubo_r", "palavra": "tubo", "d": 50.0, "e": 2.0, "comp": 600.0}))
+        diz("faz um orçamento de tubo 50x30", None)
+        assert it.tratar("como faço um cubo no solidworks?", []) is None
+        assert it.tratar("me lembra de abrir o solidworks amanhã às 9", []) is None
+        assert it.tratar("abre o relatorio", []) is not None and not feito   # é arquivo, não programa
+    finally:
+        for k, v in orig.items():
+            setattr(programas, k, v)
+        sp.criar, S.solidworks_aberto = orig_criar, orig_sw
+    # a peça no SolidWorks, com um SolidWorks de mentira que anota cada comando
+    sys.path.insert(0, str(Path(__file__).parent))
+    from fake_solidworks import fazer_sw
+    sw, reg, sm = fazer_sw()
+    ok, msg = sp.criar(sp.entender("faz uma chapa de 300 por 200 com 5 de espessura com 4 furos de 8 nos cantos a 20 mm da borda")[0], sw)
+    nomes = [c[0] for c in reg.chamadas]
+    assert ok and nomes.count("SM.CreateCircleByRadius") == 4 and "SM.CreateCenterRectangle" in nomes, reg.chamadas
+    assert ("SM.CreateCircleByRadius", (-0.13, -0.08, 0, 0.004)) in reg.chamadas, reg.chamadas
+    ext = [c for c in reg.chamadas if c[0].startswith("FM.FeatureExtrusion")][0]
+    assert abs(ext[1][5] - 0.005) < 1e-12 and sm.AddToDB is False, ext
+    sw, reg, sm = fazer_sw()
+    ok, msg = sp.criar(sp.entender("faz um tubo redondo de 50 com 2 de parede e 600 de comprimento")[0], sw)
+    circ = [c[1][3] for c in reg.chamadas if c[0] == "SM.CreateCircleByRadius"]
+    assert ok and [round(x, 6) for x in circ] == [0.025, 0.023], reg.chamadas
+    relato.append("SolidWorks de teste: " + msg)
+    print("::notice title=Programas e peças::" + " %0A".join(x.replace("%", "%25") for x in relato)[:3900], flush=True)
 
 
 @etapa("conversas de teste (secretário)")
