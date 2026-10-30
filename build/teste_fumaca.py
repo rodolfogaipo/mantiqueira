@@ -628,6 +628,13 @@ def _():
                 self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
                 self.wfile.write(corpo)
                 return
+            if u.path.endswith("/imprimir"):
+                corpo = ("<!doctype html><html><head><meta charset='utf-8'></head><body><h2>CADASTRO DE NOVO PRODUTO</h2>"
+                         "<p>CNP " + u.path.split("/")[3] + "</p><script>setTimeout(function(){window.print();},50)</script>"
+                         "</body></html>").encode()
+                self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.end_headers()
+                self.wfile.write(corpo)
+                return
             if u.path == "/cnp/cnps":
                 self.path = "/pagina.html"
             return super().do_GET()
@@ -645,6 +652,10 @@ def _():
     s = {"nome": "CNPs", "url": "http://127.0.0.1:18799/cnp/cnps", "palavras": "cnp"}
     try:
         d = sw.ler(s, cache_seg=0)
+        from mantiqueira import paths
+        pdfs = sw.gerar_pdfs(s, [("952", "banqueta miches"), ("951", "PRODUTO 951")], pasta=paths.DADOS / "teste_pdfs")
+        assert len(pdfs) == 2 and all(x.exists() and x.stat().st_size > 1000 for x in pdfs), pdfs
+        assert pdfs[0].name == "CNP 952 - banqueta miches.pdf", pdfs[0].name
     finally:
         srv.shutdown()
     assert len(d["linhas"]) == 865, len(d["linhas"])
@@ -703,6 +714,23 @@ def _():
     assert v[2].startswith("2 CNPs criados hoje"), v[2]
     assert v[3].startswith("2 CNPs aprovados pela gerência hoje"), v[3]
     assert v[4].startswith("5 CNPs aprovados pela gerência de"), v[4]
+    # imprimir / PDF depois da lista falada (sem impressora de verdade no teste)
+    import mantiqueira.intencoes as I
+    feitos, impressos, abertos = [], [], []
+    sw.gerar_pdfs = lambda s_, itens, foto=True, pasta=None: [Path(f"CNP {i_}.pdf") for i_, _ in itens] if not feitos.append((itens, foto)) else []
+    sw.imprimir = lambda a, imp=None: impressos.append((str(a), imp))
+    sw.impressoras = lambda: ["HP LaserJet M1212nf (ENGENHARIA)", "IMPRESSORA PCP", "Impressora RH"]
+    I.os.startfile = lambda c: abertos.append(c)
+    it.tratar("quantas cnp foram cadastradas ontem?", [])
+    ri = it.tratar("imprime todos sem foto na impressora pcp", [])
+    assert len(feitos[-1][0]) == 5 and feitos[-1][1] is False and len(impressos) == 5 and impressos[0][1] == "IMPRESSORA PCP", (ri, feitos, impressos)
+    it.tratar("quantas cnp foram cadastradas ontem?", [])
+    rp = it.tratar("gera pdf do 1 e do 3", [])
+    assert len(feitos[-1][0]) == 2 and abertos, (rp, feitos)
+    rn = it.tratar("imprime o cnp 960", [])
+    assert feitos[-1][0][0][0] == "960", (rn, feitos[-1])
+    r["imprime todos sem foto na impressora pcp"] = ri
+    r["gera pdf do 1 e do 3"] = rp
     print("::notice title=CNP períodos::" + " %0A".join(f"{q} → {a[:120]}" for q, a in r.items()), flush=True)
 
 

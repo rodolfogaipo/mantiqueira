@@ -102,6 +102,14 @@ PLANILHAS
 - "quem é o melhor/pior projetista?": calcula pela aba de resumo, se
   houver, ou pela média de cada aba. O ranking completo aparece na tela.
 
+IMPRIMIR / PDF DE CNP
+- "gera o PDF do CNP 953", "imprime o CNP da banqueta miches na impressora PCP",
+  "imprime sem foto". Depois de uma lista ("quais CNPs foram criados ontem?"):
+  "imprime todos", "gera PDF do 1 e do 3". Os PDFs ficam em
+  Documentos\Mantiqueira\CNPs. Ele só usa a página "Imprimir" do sistema;
+  não altera nada.
+- Depois de achar arquivos: "imprime todos" / "imprime o 2".
+
 AVISO DE CNP
 - Com o login feito, a cada 15 minutos (das 6h às 20h) ele confere o
   sistema, só lendo, e avisa CNP novo e CNP com data prevista para hoje

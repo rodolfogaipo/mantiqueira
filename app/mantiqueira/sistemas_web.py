@@ -6,6 +6,7 @@ import re
 import time
 import logging
 import threading
+from pathlib import Path
 from . import textutil
 
 log = logging.getLogger("web")
@@ -475,6 +476,74 @@ class SistemasWeb:
         finally:
             self.lock.release()
 
+    # ------------------------------------------------------------------ PDF / impressão de CNPs (só lê; não altera o sistema)
+    def url_impressao(self, sistema, id_, foto=True):
+        return sistema["url"].split("?")[0].rstrip("/") + f"/{id_}/imprimir?incluir_foto={1 if foto else 0}"
+
+    def gerar_pdfs(self, sistema, itens, foto=True, pasta=None):
+        """itens = [(id, nome)]. Gera o PDF da página 'Imprimir' de cada CNP com o navegador do Mantiqueira.
+        Devolve a lista de arquivos criados."""
+        from playwright.sync_api import sync_playwright
+        pasta = Path(pasta or (Path.home() / "Documents" / "Mantiqueira" / "CNPs"))
+        pasta.mkdir(parents=True, exist_ok=True)
+        if self._login_aberto:
+            raise RuntimeError("a janela de login ainda está aberta")
+        if not self.lock.acquire(timeout=90):
+            raise RuntimeError("o sistema ainda está sendo lido; peça de novo em instantes")
+        feitos = []
+        try:
+            with sync_playwright() as pw:
+                ctx = self._abrir_navegador(pw, sem_janela=True)
+                try:
+                    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+                    page.set_default_timeout(30000)
+                    page.add_init_script("window.print = function(){};")   # a página não abre a janela de impressão sozinha
+                    for id_, nome in itens:
+                        page.goto(self.url_impressao(sistema, id_, foto), wait_until="networkidle", timeout=40000)
+                        if self._avaliar(page, "(function(){var x=false;document.querySelectorAll('input[type=password]')"
+                                               ".forEach(function(i){if(i.offsetParent!==null)x=true;});return x;})()", json_=False):
+                            self.precisa_login.add(sistema["nome"])
+                            raise RuntimeError("o sistema pediu login")
+                        page.evaluate("Promise.all(Array.from(document.images).filter(function(i){return !i.complete;})"
+                                      ".map(function(i){return new Promise(function(r){i.onload=i.onerror=r;});}))")
+                        limpo = re.sub(r'[\\/:*?"<>|]+', " ", nome or "").strip()[:80]
+                        arq = pasta / (f"CNP {id_} - {limpo}.pdf" if limpo else f"CNP {id_}.pdf")
+                        page.pdf(path=str(arq), format="A4", print_background=True, prefer_css_page_size=True,
+                                 margin={"top": "8mm", "bottom": "8mm", "left": "8mm", "right": "8mm"})
+                        feitos.append(arq)
+                        log.info("PDF do CNP %s gerado: %s", id_, arq)
+                finally:
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+        finally:
+            self.lock.release()
+        return feitos
+
+    @staticmethod
+    def impressoras():
+        """Nomes das impressoras instaladas no Windows."""
+        import subprocess
+        try:
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-Printer | Select-Object -ExpandProperty Name"],
+                               capture_output=True, text=True, timeout=20, creationflags=0x08000000)
+            return [x.strip() for x in r.stdout.splitlines() if x.strip()]
+        except Exception:
+            return []
+
+    @staticmethod
+    def imprimir(arquivo, impressora=None):
+        """Manda o PDF para a impressora (a escolhida ou a padrão do Windows), pelo leitor de PDF instalado."""
+        import ctypes
+        sh = ctypes.windll.shell32.ShellExecuteW
+        if impressora:
+            r = sh(None, "printto", str(arquivo), f'"{impressora}"', None, 0)
+        else:
+            r = sh(None, "print", str(arquivo), None, None, 0)
+        if r <= 32:
+            raise RuntimeError(f"o Windows não conseguiu imprimir (código {r}); confira se há um leitor de PDF instalado")
+
     # ------------------------------------------------------------------ teste (botão TESTAR)
     def testar(self, nome):
         s = next((x for x in self.lista() if x["nome"] == nome), None)
@@ -705,6 +774,7 @@ class SistemasWeb:
             return "; ".join(partes)
         self.n.detalhe_texto = ""
         self.ultimo_produto = ""
+        self.ultima_lista = []
         campo = next((k for k, rx in self.PERGUNTA_CAMPO if re.search(rx, p) and k in m), None)
         # período citado (hoje, ontem, 28/10, "do dia 27/10 até hoje", "esta semana"…) → filtrar pela coluna de data
         periodo = self._periodo(p)
@@ -753,7 +823,8 @@ class SistemasWeb:
                 rotulo = rotulo.replace("em ", "para ", 1) if rotulo.startswith("em ") else rotulo
             if not escolhidas:
                 return f"Nenhum CNP {rot1} {rotulo}, {self.n.cfg['tratamento']}. Conferi os {len(linhas)} CNPs do sistema."
-            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:60])
+            self.n.detalhe_texto = "\n".join(f"{i + 1}. " + ficha(l) for i, l in enumerate(escolhidas[:60]))
+            self.ultima_lista = [(v(l, "id"), nome(l)) for l in escolhidas[:60]]
             if len(escolhidas) == 1:
                 return f"Um CNP {rot1} {rotulo}: {ficha(escolhidas[0])}."
             nomes = "; ".join(nome(l) for l in escolhidas[:8])
@@ -761,7 +832,8 @@ class SistemasWeb:
             return f"{len(escolhidas)} CNPs {rot} {rotulo}: {nomes}{resto}. A lista completa está na tela."
         if termos:
             self.ultimo_produto = " ".join(termos)       # para "e o pedido dela?" logo depois
-            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:20])
+            self.n.detalhe_texto = "\n".join(f"{i + 1}. " + ficha(l) for i, l in enumerate(escolhidas[:20]))
+            self.ultima_lista = [(v(l, "id"), nome(l)) for l in escolhidas[:20]]
             if campo:
                 fala = next(f for k, _, f in self.CAMPOS if k == campo)
                 if len(escolhidas) == 1:
@@ -774,7 +846,8 @@ class SistemasWeb:
         if campo == "aprovacao" and re.search(r"\b(quais|quantos|quantas|lista|listar|mostra|todos|todas)\b", p):
             apr = [l for l in linhas if self._data(v(l, "aprovacao"))]
             apr.sort(key=lambda l: self._data_hora(v(l, "aprovacao")), reverse=True)
-            self.n.detalhe_texto = "\n".join(ficha(l) for l in apr[:60])
+            self.n.detalhe_texto = "\n".join(f"{i + 1}. " + ficha(l) for i, l in enumerate(apr[:60]))
+            self.ultima_lista = [(v(l, "id"), nome(l)) for l in apr[:60]]
             return (f"{len(apr)} dos {len(linhas)} CNPs já foram aprovados pela gerência. Os mais recentes: "
                     + "; ".join(f"{nome(l)}, em {v(l, 'aprovacao')}" for l in apr[:5]) + ".")
         if re.search(r"\b(quais|quantos|quantas|lista|listar|mostra|todos|todas)\b", p):

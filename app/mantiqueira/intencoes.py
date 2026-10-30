@@ -32,10 +32,12 @@ PARAR_NUCLEO = {"nao", "para", "pare", "parar", "cancela", "cancele", "cancelar"
                 "esquece", "stop"}
 PARAR_RESTO = {"quero", "precisa", "pra", "la", "isso", "nada", "obrigado", "obrigada", "mantiqueira", "ok", "mais", "agora",
                "por", "favor", "de", "falar", "senhor", "tudo", "bem", "e", "o", "a", "ja", "pode", "nao"}
+RX_IMPRIMIR = re.compile(r"\bimprim\w*|\bimpressao\b|\b(gera|gere|gerar|salva|salve|salvar|cria|crie|criar|faz|faca|fazer|"
+                         r"exporta|exporte|exportar|tira|tire)\w*\b.{0,40}\bpdfs?\b|\bem pdf\b|\bo pdf d[aeo]s? cnps?\b")
 RX_ABRIR = re.compile(r"\b(abre|abra|abrir|abrindo|abri)\b")
 # tipo de arquivo citado → extensões aceitas
 TIPOS = [
-    (r"\bpdfs?\b", [".pdf"]),
+    (r"\b(?:em |no formato )?pdfs?\b", [".pdf"]),
     (r"\b(planilhas?|excel|xlsx?)\b", [".xlsx", ".xls", ".xlsm", ".csv"]),
     (r"\b(word|docx?)\b", [".docx", ".doc"]),
     (r"\bdxf\b", [".dxf"]),
@@ -90,7 +92,7 @@ class Intencoes:
     # ------------------------------------------------------------------ roteador
     def tratar(self, pergunta, historico):
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
-        for f in (self.parar, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
+        for f in (self.parar, self.imprimir_pedido, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
                   self.conteudo_pasta, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
@@ -484,6 +486,8 @@ class Intencoes:
         """Resposta a uma lista que acabei de dar: "sim", "abre", "o segundo", "abre a pasta". Uma frase com outro
         nome de arquivo não entra aqui (vira um pedido novo)."""
         if not self.resultados or time.time() - self.quando_busca > 600:
+            return None
+        if RX_IMPRIMIR.search(p):
             return None
         if not re.search(r"\b(abr[ea]|abrir|pode abrir|sim|isso|esse|essa|esse mesmo|o primeiro|o segundo|o terceiro|"
                          r"a primeira|a segunda|a pasta|mostra a pasta|onde fica a pasta|primeiro|segundo|terceiro|quarto|quinto|"
@@ -907,6 +911,161 @@ class Intencoes:
         iguais = [r for r in cands if textutil.sem_acento(r["nome"].lower()).strip() == nome]
         cands = sorted(iguais or cands, key=lambda r: r["caminho"].count("\\"))
         return cands[0]["caminho"] if cands else None
+
+    # ------------------------------------------------------------------ imprimir / gerar PDF (CNPs e arquivos achados)
+    @staticmethod
+    def _selecao(p, total):
+        """Índices escolhidos numa lista falada: 'todos', 'os dois primeiros', 'o 1 e o 3', 'o segundo'. None = não disse."""
+        if re.search(r"\b(todos|todas|tudo|ambos|ambas|eles|elas)\b", p):
+            return list(range(total))
+        mm = re.search(r"\b(?:os|as) (dois|duas|tres) primeir[oa]s\b|\b(?:os|as) (dois|duas|tres)\b", p)
+        if mm:
+            return list(range(min({"dois": 2, "duas": 2, "tres": 3}[mm.group(1) or mm.group(2)], total)))
+        nums = []
+        for m_ in re.finditer(r"\b(" + "|".join(sorted(ORDINAIS, key=len, reverse=True)) + r"|\d{1,2})\b", p):
+            w = m_.group(1)
+            i_ = ORDINAIS.get(w, int(w) - 1 if w.isdigit() else None)
+            if i_ is not None and i_ not in nums:
+                nums.append(i_ if i_ >= 0 else total - 1)
+        if nums:
+            return [i for i in nums if 0 <= i < total]
+        if total == 1 and re.search(r"\b(esse|essa|este|esta|ele|ela|dele|dela|isso|o pdf|a cnp|o cnp)\b", p):
+            return [0]
+        return None
+
+    def _impressora(self, p, sw):
+        m = re.search(r"\bna (?:impressora|maquina)(?: d[aeo])?\s+([a-z0-9][a-z0-9 \-]*)", p)
+        if not m:
+            return None, None
+        pedido = m.group(1).strip()
+        lista = sw.impressoras() if sw else []
+        pal = [w for w in re.findall(r"[a-z0-9]+", pedido) if w not in ("da", "do", "de", "com", "sem", "foto")]
+        for nome in lista:
+            nn = textutil.sem_acento(nome.lower())
+            if pal and all(w in nn for w in pal[:2]):
+                return nome, None
+        for nome in lista:
+            nn = textutil.sem_acento(nome.lower())
+            if pal and any(w in nn for w in pal if len(w) >= 2):
+                return nome, None
+        return None, (f"Não achei a impressora \"{pedido}\", {self._trat()}. As impressoras deste computador são: "
+                      + "; ".join(lista) + ".") if lista else f"Não consegui ver as impressoras deste computador, {self._trat()}."
+
+    def imprimir_pedido(self, p, original):
+        if not RX_IMPRIMIR.search(p):
+            return None
+        if RX_ABRIR.search(p) and not re.search(r"imprim|\bgera|\bgere|\bsalva|\bexporta|\bcria", p):
+            return None                                 # "abre o plano de corte em pdf" é abrir arquivo
+        imprimir = bool(re.search(r"\bimprim\w*|\bimpressao\b", p))
+        sw = self.n.sistemas
+        u = getattr(self, "ultimo_cnp", None)
+        lista_cnp = getattr(sw, "ultima_lista", []) if sw else []
+        recente_cnp = bool(u and time.time() - u["t"] < 900 and lista_cnp)
+        fala_cnp = bool(re.search(r"\bcnps?\b|\borigus\b", p))
+        # 1) arquivos que acabei de achar ("imprime todos" depois de uma busca)
+        if imprimir and not fala_cnp and self.resultados and time.time() - self.quando_busca < 600 and \
+                not (recente_cnp and u["t"] > self.quando_busca):
+            sel = self._selecao(p, len(self.resultados))
+            if sel is None:
+                sel = [0] if len(self.resultados) == 1 else None
+            if sel is None:
+                return f"Qual deles eu imprimo, {self._trat()}? Diga o número, ou \"imprime todos\"."
+            impressora, erro = self._impressora(p, sw)
+            if erro:
+                return erro
+            arqs = [self.resultados[i] for i in sel if not self.resultados[i]["eh_pasta"]][:20]
+            for r in arqs:
+                from .sistemas_web import SistemasWeb
+                SistemasWeb.imprimir(r["caminho"], impressora)
+                time.sleep(1.5)
+            self.resultados = []
+            return (f"Mandei imprimir {len(arqs)} arquivo{'s' if len(arqs) > 1 else ''}"
+                    f"{' na ' + impressora if impressora else ''}: " + "; ".join(r["nome"] for r in arqs) + ".")
+        # 2) CNPs do sistema
+        if not sw or not (fala_cnp or recente_cnp):
+            return None
+        s = sw.qual(p) or (u["s"] if u else None) or next((x for x in sw.lista() if "cnp" in (x["url"] + x["nome"]).lower()), None)
+        if not s:
+            return None
+        try:
+            d = sw.ler(s)
+        except Exception as e:
+            return f"Não consegui ler o sistema de {s['nome']} agora, {self._trat()} ({e})."
+        if d.get("login"):
+            return f"O sistema de {s['nome']} está pedindo login, {self._trat()}. Clique em Entrar nas Configurações."
+        m = sw._mapa(d["cab"])
+        ids_sistema = {(l[m["id"]] if m.get("id") is not None and m["id"] < len(l) else ""): l for l in d["linhas"]}
+        itens = []
+        # números de CNP ditos ("imprime o CNP 953 e o 954")
+        for n_ in re.findall(r"\b(\d{3,5})\b", p):
+            if n_ in ids_sistema:
+                l = ids_sistema[n_]
+                prod = re.split(r"\s+similar:", l[m["produto"]], flags=re.I)[0].strip() if m.get("produto") is not None else ""
+                itens.append((n_, f"CNP {n_}, {prod}"))
+        if not itens:
+            sel = self._selecao(re.sub(r"\b\d{3,5}\b", " ", p), len(lista_cnp)) if recente_cnp else None
+            if sel is not None:
+                itens = [lista_cnp[i] for i in sel]
+            else:
+                # pelo nome do produto / período: "imprime o CNP da banqueta miches", "gera pdf dos CNPs criados ontem"
+                consulta = re.sub(r"\b(imprim\w*|impressao|gera\w*|gere|salva\w*|cria\w*|faz|faca|fazer|exporta\w*|tira|tire|"
+                                  r"pdfs?|em|com|sem|foto|fotos|na|impressora|maquina|pcp|rh|engenharia|pra|para|mim|me|o|a|os|as|"
+                                  r"um|uma|de|do|da|dos|das|cnp|cnps)\b", " ", p)
+                consulta = re.sub(r"\s+", " ", consulta).strip()
+                if consulta:
+                    resp = sw.responder(s, d, "cnp " + consulta)
+                    lista_cnp = getattr(sw, "ultima_lista", [])
+                    if not lista_cnp:
+                        return resp or f"Não achei esse CNP, {self._trat()}."
+                    if len(lista_cnp) > 1 and not re.search(r"\b(todos|todas|ambos|ambas)\b", p):
+                        self.ultimo_cnp = {"s": s, "t": time.time(), "campo_txt": "", "produto_txt": ""}
+                        nomes = "; ".join(f"{i + 1}, {nm}" for i, (_, nm) in enumerate(lista_cnp[:8]))
+                        return (f"Achei {len(lista_cnp)} CNPs: {nomes}. Qual eu {'imprimo' if imprimir else 'passo para PDF'}? "
+                                f"Diga o número, ou \"todos\".")
+                    itens = lista_cnp
+        if not itens:
+            return (f"Qual CNP eu {'imprimo' if imprimir else 'passo para PDF'}, {self._trat()}? Diga o número do CNP, "
+                    f"o nome do produto, ou peça depois de uma lista: \"imprime todos\".")
+        itens = itens[:30]
+        impressora, erro = self._impressora(p, sw) if imprimir else (None, None)
+        if erro:
+            return erro
+        foto = not re.search(r"\bsem foto", p)
+        aviso = (f"Um instante, {self._trat()}. Estou preparando {len(itens)} CNP{'s' if len(itens) > 1 else ''}.")
+        try:
+            self.n.ultima["assistente"] = aviso
+            if self.n.voz and not self.n.em_silencio():
+                self.n.voz.falar(aviso)
+        except Exception:
+            pass
+        try:
+            pdfs = sw.gerar_pdfs(s, [(i_, nm.split(", ", 1)[-1]) for i_, nm in itens], foto=foto)
+        except Exception as e:
+            log.exception("PDF do CNP")
+            return f"Não consegui gerar o PDF, {self._trat()} ({e})."
+        self.n.detalhe_texto = "\n".join(str(x) for x in pdfs)
+        self.ultimo_cnp = {"s": s, "t": time.time(), "campo_txt": "", "produto_txt": ""}
+        if imprimir:
+            erros = 0
+            for arq in pdfs:
+                try:
+                    sw.imprimir(arq, impressora)
+                    time.sleep(2)
+                except Exception:
+                    log.exception("imprimir")
+                    erros += 1
+            if erros == len(pdfs):
+                return (f"Gerei os PDFs, mas o Windows não conseguiu mandar para a impressora, {self._trat()}. "
+                        f"Eles estão em Documentos, Mantiqueira, CNPs.")
+            return (f"Mandei imprimir {len(pdfs) - erros} CNP{'s' if len(pdfs) - erros > 1 else ''}"
+                    f"{' na ' + impressora if impressora else ' na impressora padrão'}"
+                    f"{', sem foto' if not foto else ''}: " + "; ".join(nm for _, nm in itens[:6]) + ".")
+        if len(pdfs) == 1:
+            os.startfile(str(pdfs[0]))
+            return f"Pronto, gerei o PDF do {itens[0][1]} e abri. Ele fica em Documentos, Mantiqueira, CNPs."
+        os.startfile(str(pdfs[0].parent))
+        return (f"Pronto, gerei {len(pdfs)} PDFs e abri a pasta Documentos, Mantiqueira, CNPs: "
+                + "; ".join(nm for _, nm in itens[:6]) + ".")
 
     # ------------------------------------------------------------------ ler outra janela
     def ler_janela(self, p, original):
