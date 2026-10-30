@@ -42,6 +42,7 @@ TIPOS = [
     (r"\bdwg\b|\bautocad\b", [".dwg"]),
     (r"\bmontage(m|ns)\b", [".sldasm"]),
     (r"\b(detalhamento|desenho do solid\w*)\b", [".slddrw"]),
+    (r"\bdesenhos?\b", [".slddrw", ".dwg", ".dxf"]),
     (r"\b(solid\s*works?|solid)\b", [".sldprt", ".sldasm", ".slddrw"]),
     (r"\bpeca\b", [".sldprt"]),
     (r"\b(sketchup|skp)\b", [".skp"]),
@@ -531,6 +532,21 @@ class Intencoes:
             os.startfile(caminho)
             self.ultimo_caminho = caminho
             return f"Abrindo {os.path.basename(caminho.rstrip(chr(92))) or caminho}."
+        mp = re.search(r"\b(?:abr[ea]|abrir)\s+(?:a|essa|esta)?\s*pasta\s+(.+)$", p)
+        if mp and not (self.resultados and re.fullmatch(r"(a )?pasta( dele| dela| do arquivo)?", mp.group(1).strip())):
+            onde, lugar, resto = self._onde(mp.group(1))
+            raizes = [r for r, _, _ in (self.n.indice.locais() if self.n.indice else [])]
+            raiz = onde if (onde in raizes or re.fullmatch(r"[A-Z]:\\", onde or "")) else ("C:\\" if onde == "pc" else None)
+            partes = [re.sub(r"\s+", " ", re.sub(r"\b(pasta|a|o|que|esta|fica|mantiqueira|pra|para|mim)\b", " ", x)).strip()
+                      for x in re.split(r"\s+(?:da|do|de|dentro da|dentro do)\s+(?:pasta\s+)?", resto.strip())]
+            partes = [x for x in partes if x]
+            if partes:
+                alvo = self._achar_pasta(partes, raiz, raizes)
+                if alvo:
+                    os.startfile(alvo)
+                    self.ultimo_caminho = alvo
+                    return f"Abrindo a pasta {os.path.basename(alvo.rstrip(chr(92)))}."
+                return f"Não encontrei a pasta \"{' / '.join(partes)}\"{lugar}, {self._trat()}."
         ix = self.n.indice
         onde, lugar, resto = self._onde(p)
         dicas, resto = self._pastas_citadas(resto)
@@ -564,6 +580,11 @@ class Intencoes:
         self.consulta, self.quando_busca = consulta, time.time()
         self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
                              "achou": len(exatos), "parecidos": len(parecidos)}
+        # nome do arquivo igual ao que ele disse (sem "PLANO DE CORTE…" e afins): é esse
+        iguais = [r for r in exatos if not r["eh_pasta"] and
+                  re.sub(r"\s+", " ", textutil.sem_acento(os.path.splitext(r["nome"])[0].lower())).strip() == consulta]
+        if len(iguais) == 1:
+            exatos = iguais
         if len(exatos) == 1:
             r = exatos[0]
             if ix:
@@ -763,28 +784,13 @@ class Intencoes:
         lixo = r"\b(quantas|quantos|quais|lista|listar|mostra|mostre|o que|tem|ha|existe|existem|pastas?|arquivos?|itens|aba|" \
                r"inicial|inicialmente|assim|que|voce|vc|entra|entrar|quando|logo|ao|na|no|da|do|de|dentro|primeira|tela|" \
                r"mantiqueira|agora|hoje|e|a|o|os|as|nela|nele|conteudo)\b"
-        nome = re.sub(r"\s+", " ", re.sub(lixo, " ", nome)).strip()
+        partes = [re.sub(r"\s+", " ", re.sub(lixo, " ", x)).strip()
+                  for x in re.split(r"\s+(?:da|do|de|dentro da|dentro do)\s+(?:pasta\s+)?", nome)]
+        partes = [x for x in partes if x]
+        nome = " / ".join(partes)
         alvo = raiz
-        if nome:
-            alvo = None
-            bases = [raiz] if raiz else raizes
-            for b in bases:                               # primeiro: pasta com esse nome logo na entrada da unidade
-                try:
-                    for e in os.scandir(b):
-                        if e.is_dir() and textutil.sem_acento(e.name.lower()).strip() == nome:
-                            alvo = e.path
-                            break
-                except OSError:
-                    continue
-                if alvo:
-                    break
-            if not alvo and self.n.indice:               # depois: no mapa de arquivos (a mais rasa)
-                ex, par = self.n.indice.buscar(nome, raiz or "tudo", limite=30)
-                pastas = sorted([r for r in ex if r["eh_pasta"] and textutil.sem_acento(r["nome"].lower()) == nome],
-                                key=lambda r: r["caminho"].count("\\")) or \
-                    sorted([r for r in ex if r["eh_pasta"]], key=lambda r: r["caminho"].count("\\"))
-                if pastas:
-                    alvo = pastas[0]["caminho"]
+        if partes:
+            alvo = self._achar_pasta(partes, raiz, raizes)
             if not alvo:
                 return f"Não encontrei a pasta \"{nome}\"{lugar}, {self._trat()}."
         if not alvo:
@@ -814,7 +820,41 @@ class Intencoes:
         fa = ("nenhum arquivo" if not arqs else ("um arquivo" if len(arqs) == 1 else f"{len(arqs)} arquivos"))
         lista_p = (": " + ", ".join(pastas[:12]) + (f", e mais {len(pastas) - 12}" if len(pastas) > 12 else "")) if pastas else ""
         lista_a = (": " + ", ".join(arqs[:5]) + (f", e mais {len(arqs) - 5}" if len(arqs) > 5 else "")) if arqs else ""
-        return f"Ao entrar em {rot} há {fp}{lista_p}. E {fa}{lista_a}."
+        # "abre o terceiro" logo depois abre o item da lista falada (primeiro as pastas, depois os arquivos)
+        self.resultados = [{"nome": x, "caminho": os.path.join(alvo, x), "pasta": alvo, "origem": "", "eh_pasta": 1}
+                           for x in pastas] + \
+                          [{"nome": x, "caminho": os.path.join(alvo, x), "pasta": alvo, "origem": "", "eh_pasta": 0}
+                           for x in arqs]
+        self.consulta, self.quando_busca = os.path.basename(alvo), time.time()
+        if not pastas and not arqs:
+            return f"A pasta {rot} está vazia, {self._trat()}."
+        if not pastas:
+            return f"Em {rot} não há pastas, só {fa}{lista_a}."
+        if not arqs:
+            return f"Em {rot} há {fp}{lista_p}, e nenhum arquivo solto."
+        return f"Em {rot} há {fp}{lista_p}. E {fa}{lista_a}."
+
+    def _achar_pasta(self, partes, raiz, raizes):
+        """partes = ['impressos', 'espreguicadeira alemanha'] → a pasta IMPRESSOS que fica dentro de ESPREGUIÇADEIRA ALEMANHA."""
+        nome, acima = partes[0], partes[1:]
+        bases = [raiz] if raiz else raizes
+        if not acima:
+            for b in bases:                               # primeiro: pasta com esse nome logo na entrada da unidade
+                try:
+                    for e in os.scandir(b):
+                        if e.is_dir() and textutil.sem_acento(e.name.lower()).strip() == nome:
+                            return e.path
+                except OSError:
+                    continue
+        if not self.n.indice:
+            return None
+        ex, par = self.n.indice.buscar(nome, raiz or "tudo", limite=200)
+        cands = [r for r in ex if r["eh_pasta"]]
+        if acima:
+            cands = [r for r in cands if self._na_pasta(r["caminho"], acima)]
+        iguais = [r for r in cands if textutil.sem_acento(r["nome"].lower()).strip() == nome]
+        cands = sorted(iguais or cands, key=lambda r: r["caminho"].count("\\"))
+        return cands[0]["caminho"] if cands else None
 
     # ------------------------------------------------------------------ ler outra janela
     def ler_janela(self, p, original):

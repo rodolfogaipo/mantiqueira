@@ -746,7 +746,21 @@ def _():
     assert abertos and abertos[-1].replace("\\", "/").endswith("ENGENHARIA/PROJETOS/MESA LUNA/MESA LUNA OVAL.pdf"), (r3, abertos)
     r4 = it.tratar("abre a mesa luna oval na pasta laser", [])
     assert abertos[-1].endswith(".dxf"), (r4, abertos)
-    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4}", flush=True)
+    d = Z / "ENGENHARIA/PROJETOS/Projetos Kauan/ALEMANHA/ESPREGUIÇADEIRA ALEMANHA/IMPRESSOS"
+    d.mkdir(parents=True, exist_ok=True)
+    for f in ["ESPREGUIÇADEIRA ALEMANHA.PDF", "ESPREGUIÇADEIRA ALEMANHA.SLDDRW", "PLANO DE CORTE ESPREGUIÇADEIRA ALEMANHA.PDF"]:
+        (d / f).write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    r5 = it.tratar("abre o pdf da espreguiçadeira alemanha", [])
+    assert abertos[-1].endswith("IMPRESSOS" + os.sep + "ESPREGUIÇADEIRA ALEMANHA.PDF") or \
+        abertos[-1].replace("\\", "/").endswith("IMPRESSOS/ESPREGUIÇADEIRA ALEMANHA.PDF"), (r5, abertos)
+    r6 = it.tratar("o que tem na pasta impressos da espreguiçadeira alemanha", [])
+    assert "3 arquivos" in r6, r6
+    r7 = it.tratar("abre o terceiro", [])
+    assert abertos[-1].endswith("PLANO DE CORTE ESPREGUIÇADEIRA ALEMANHA.PDF"), (r7, abertos)
+    r8 = it.tratar("abre a pasta impressos da espreguiçadeira alemanha", [])
+    assert abertos[-1].replace("\\", "/").endswith("ESPREGUIÇADEIRA ALEMANHA/IMPRESSOS"), (r8, abertos)
+    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8}", flush=True)
 
 
 @etapa("conversas de teste (secretário)")
