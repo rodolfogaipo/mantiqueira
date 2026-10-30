@@ -630,10 +630,14 @@ class Intencoes:
             tem_produto = bool(i is not None and any(
                 any(re.search(r"\b" + re.escape(w), textutil.sem_acento((l[i] if i < len(l) else "").lower())) for w in palavras)
                 for l in d_cache.get("linhas", [])))
-            if not tem_campo and u.get("campo_txt"):
+            if not tem_campo and u.get("campo_txt") and not re.search(r"\b(quantos|quantas|quais|lista|todos|todas)\b", p):
                 pergunta_sistema += " " + u["campo_txt"]
-            if not tem_produto and re.search(r"\b(dela|dele|ela|ele|desse|dessa|mesmo|mesma|isso)\b|^e (o|a) (pedido|data|status|setores?|"
-                                              r"quantidade|linha|carga)\b|^(qual|quando|quem|quantas)\b", p) and u.get("produto_txt"):
+            pergunta_geral = re.search(r"\b(quantos|quantas|quais|lista|listar|todos|todas|foram|ontem|hoje|anteontem|semana|"
+                                       r"mes|ate|desde|entre|\d{1,2}/\d{1,2})\b", p)
+            if not tem_produto and not pergunta_geral and u.get("produto_txt") and \
+                    re.search(r"\b(dela|dele|ela|ele|desse|dessa|mesmo|mesma|isso)\b|^e (o|a|os) (pedido|data|status|setores?|"
+                              r"quantidade|linha|carga|aprovacao)\b|^(quem criou|quando foi criad[oa]|qual o pedido|"
+                              r"qual a data)\b\W*$", p):
                 pergunta_sistema += " " + u["produto_txt"]
         campo_txt = next((re.search(rx, p).group(0) for _, rx in sw.PERGUNTA_CAMPO if re.search(rx, p)), "")
         ps = textutil.sem_acento(pergunta_sistema.lower())
@@ -642,7 +646,7 @@ class Intencoes:
                                                   r"tem|esta|dela|dele|ela|ele|mantiqueira)\b|[?!.,]", " ", ps)).strip()
         self.ultimo_cnp = {"s": s, "t": time.time(),
                            "campo_txt": campo_txt or (u.get("campo_txt", "") if u else ""),
-                           "produto_txt": produto_txt or (u.get("produto_txt", "") if u else "")}
+                           "produto_txt": (u.get("produto_txt", "") if u else "")}
         original = pergunta_sistema
         c = sw.cache.get(s["nome"])
         if not (c and time.time() - c[0] < 180):
@@ -671,6 +675,9 @@ class Intencoes:
             log.exception("resposta exata do sistema")
             exata = None
         if exata:
+            u2 = getattr(self, "ultimo_cnp", None)
+            if u2 is not None:
+                u2["produto_txt"] = getattr(sw, "ultimo_produto", "") or u2.get("produto_txt", "")
             return exata                                # resposta tirada direto da tabela, sem a IA
         self.n.contexto_extra = sw.formatar(s, d, original)
         return None                                     # a IA responde usando os dados lidos

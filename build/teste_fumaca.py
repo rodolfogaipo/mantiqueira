@@ -655,6 +655,57 @@ def _():
     print(f"::notice title=Sistema igual ao Órigus::{len(d['linhas'])} registros lidos — {r} %0A{r2}", flush=True)
 
 
+@etapa("CNP: contagens e períodos (criados/aprovados hoje, ontem, do dia X até hoje)")
+def _():
+    import datetime as dt
+    from mantiqueira import paths
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    from mantiqueira.sistemas_web import SistemasWeb
+    from mantiqueira.intencoes import Intencoes
+    H = dt.date.today()
+
+    def f(d):
+        return d.strftime("%d/%m/%Y") + " 10:00"
+    cab = ["ID", "Produto", "Pedido", "Linha", "Carga", "Qtd Peças", "Data Prevista", "Aprovação Gerência", "Setores",
+           "Status Geral", "Criado por", "Data Criação", "Ações"]
+    L = []
+
+    def add(id_, prod, criado, aprov=None):
+        L.append([str(id_), prod, "1219" + str(id_), "X", "-", "1", "-", f(aprov) if aprov else "", "", "em analise pcp",
+                  "Janaína Ferreira", f(criado), "editcheck"])
+    add(972, "BANCO HOJE A", H, H)
+    add(971, "BANCO HOJE B", H)
+    for i in range(5):
+        add(966 - i, f"MESA ONTEM {i}", H - dt.timedelta(days=1), H - dt.timedelta(days=1) if i < 3 else None)
+    add(960, "SOFA ANTEONTEM", H - dt.timedelta(days=2), H)
+    for i in range(300):
+        add(900 - i, f"PRODUTO {i}", H - dt.timedelta(days=200), H - dt.timedelta(days=199))
+    d = {"login": False, "cab": cab, "linhas": L, "hora": "08:30", "paginas": 1}
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_periodo.db"); n.detalhe_texto = ""; n.contexto_extra = ""
+    n.indice = None; n.olhos = None; n.memoria = None; n.frases = None; n.parar_fala = lambda: None; n.cerebro = None
+    n.ultima = {}; n.voz = None; n.em_silencio = lambda: False
+    n.sistemas = sw = SistemasWeb(n)
+    sw.ler = lambda s, cache_seg=180: d
+    sw.ultimos["CNPs"] = d
+    it = Intencoes(n)
+    dia = (H - dt.timedelta(days=2)).strftime("%d/%m")
+    r = {q: it.tratar(q, []) for q in [
+        "quantas cnp foram cadastradas ontem?", "quantas cnps foram criadas?", "tem mais alguma cnp nova criada hoje?",
+        "quantas cnps foram aprovadas pela gerência hoje?", f"quais cnps foram aprovadas pela gerência do dia {dia} até hoje?"]}
+    v = list(r.values())
+    assert v[0].startswith("5 CNPs criados ontem"), v[0]
+    assert "tem 308 CNPs" in v[1], v[1]
+    assert v[2].startswith("2 CNPs criados hoje"), v[2]
+    assert v[3].startswith("2 CNPs aprovados pela gerência hoje"), v[3]
+    assert v[4].startswith("5 CNPs aprovados pela gerência de"), v[4]
+    print("::notice title=CNP períodos::" + " %0A".join(f"{q} → {a[:120]}" for q, a in r.items()), flush=True)
+
+
 @etapa("conversas de teste (secretário)")
 def _():
     import datetime as dt

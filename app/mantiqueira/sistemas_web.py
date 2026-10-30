@@ -704,26 +704,11 @@ class SistemasWeb:
                     partes.append(f"{fala}: {x}")
             return "; ".join(partes)
         self.n.detalhe_texto = ""
+        self.ultimo_produto = ""
         campo = next((k for k, rx in self.PERGUNTA_CAMPO if re.search(rx, p) and k in m), None)
-        # data citada (ontem, hoje, 28/10…) → filtrar pela coluna de data
-        alvo_data = None
-        if re.search(r"\bontem\b", p):
-            alvo_data = dt.date.today() - dt.timedelta(days=1)
-        elif re.search(r"\banteontem\b", p):
-            alvo_data = dt.date.today() - dt.timedelta(days=2)
-        elif re.search(r"\bhoje\b", p):
-            alvo_data = dt.date.today()
-        elif re.search(r"\bamanha\b", p):
-            alvo_data = dt.date.today() + dt.timedelta(days=1)
-        else:
-            md = re.search(r"\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b", p)
-            if md:
-                ano = int(md.group(3)) if md.group(3) else dt.date.today().year
-                ano = ano + 2000 if ano < 100 else ano
-                try:
-                    alvo_data = dt.date(ano, int(md.group(2)), int(md.group(1)))
-                except ValueError:
-                    alvo_data = None
+        # período citado (hoje, ontem, 28/10, "do dia 27/10 até hoje", "esta semana"…) → filtrar pela coluna de data
+        periodo = self._periodo(p)
+        alvo_data = periodo[0] if periodo else None
         ignorar = {"cnp", "cnps", "origus", "syntex", "sistema", "programa", "qual", "quais", "quanto", "quantos", "quantas",
                    "data", "dia", "prevista", "previsto", "previsao", "da", "do", "de", "na", "no", "o", "a", "os", "as", "e",
                    "tem", "que", "ta", "esta", "estao", "me", "fala", "diz", "pra", "para", "qual", "quando", "foi", "foram",
@@ -735,7 +720,10 @@ class SistemasWeb:
                    "linha", "carga", "situacao", "andamento", "como", "pendente", "pendentes", "ultimo", "ultimos",
                    "teve", "tiveram", "houve", "ha", "existe", "existem", "algum", "alguma", "alguns", "algumas", "sao",
                    "sobre", "saber", "quero", "preciso", "ver", "informacao", "informacoes", "registro", "registros",
-                   "nele", "nela", "dele", "dela", "isso", "esse", "essa", "deu", "tudo"}
+                   "nele", "nela", "dele", "dela", "isso", "esse", "essa", "deu", "tudo", "cadastrada", "cadastradas",
+                   "cadastro", "cadastros", "criacao", "abertas", "aberta", "aberto", "abertos", "entraram", "entrou", "ate",
+                   "desde", "partir", "entre", "semana", "mes", "passada", "passado", "ultimos", "dias", "pela", "pelo",
+                   "nesta", "neste", "nessa", "nesse", "este", "esta", "quantidade", "total", "mais", "escolhido", "agora"}
         termos = [t for t in re.findall(r"[a-z0-9]{2,}", p) if t not in ignorar and not re.fullmatch(r"\d{1,2}|\d{4}", t)]
         escolhidas = linhas
         if termos:
@@ -754,20 +742,25 @@ class SistemasWeb:
             exatas = [] if not termos else [l for l in escolhidas if all(re.search(r"\b" + re.escape(t), textutil.sem_acento(nome(l).lower()))
                                                    for t in termos)]
             escolhidas = exatas or escolhidas
-        if alvo_data:
+        if periodo:
+            ini, fim, rotulo = periodo
             col = campo if campo in ("prevista", "aprovacao", "criacao") else ("criacao" if "criacao" in m else "prevista")
-            escolhidas = [l for l in escolhidas if self._data(v(l, col)) == alvo_data]
-            rot = {"criacao": "criados", "aprovacao": "aprovados pela gerência", "prevista": "com data prevista para"}[col]
-            rot1 = {"criacao": "criado", "aprovacao": "aprovado pela gerência", "prevista": "com data prevista para"}[col]
-            quando = alvo_data.strftime("%d/%m/%Y")
+            escolhidas = [l for l in escolhidas if (lambda d_: d_ is not None and ini <= d_ <= fim)(self._data(v(l, col)))]
+            escolhidas.sort(key=lambda l: self._data_hora(v(l, col)), reverse=True)
+            rot = {"criacao": "criados", "aprovacao": "aprovados pela gerência", "prevista": "com data prevista"}[col]
+            rot1 = {"criacao": "criado", "aprovacao": "aprovado pela gerência", "prevista": "com data prevista"}[col]
+            if col == "prevista":
+                rotulo = rotulo.replace("em ", "para ", 1) if rotulo.startswith("em ") else rotulo
             if not escolhidas:
-                return f"Nenhum CNP {rot1} {quando}, {self.n.cfg['tratamento']}. Li {len(linhas)} CNPs no sistema."
-            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:30])
+                return f"Nenhum CNP {rot1} {rotulo}, {self.n.cfg['tratamento']}. Conferi os {len(linhas)} CNPs do sistema."
+            self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:60])
             if len(escolhidas) == 1:
-                return f"Um CNP {rot1} {quando}: {ficha(escolhidas[0])}."
-            return (f"{len(escolhidas)} CNPs {rot} {quando}: " + "; ".join(nome(l) for l in escolhidas[:6])
-                    + ". A lista completa está na tela.")
+                return f"Um CNP {rot1} {rotulo}: {ficha(escolhidas[0])}."
+            nomes = "; ".join(nome(l) for l in escolhidas[:8])
+            resto = f", e mais {len(escolhidas) - 8}" if len(escolhidas) > 8 else ""
+            return f"{len(escolhidas)} CNPs {rot} {rotulo}: {nomes}{resto}. A lista completa está na tela."
         if termos:
+            self.ultimo_produto = " ".join(termos)       # para "e o pedido dela?" logo depois
             self.n.detalhe_texto = "\n".join(ficha(l) for l in escolhidas[:20])
             if campo:
                 fala = next(f for k, _, f in self.CAMPOS if k == campo)
@@ -778,11 +771,82 @@ class SistemasWeb:
             if len(escolhidas) == 1:
                 return ficha(escolhidas[0]) + "."
             return f"Encontrei {len(escolhidas)} CNPs: " + "; ".join(nome(l) for l in escolhidas[:6]) + ". Os detalhes estão na tela."
-        if re.search(r"\b(quais|quantos|lista|listar|mostra|todos)\b", p):
+        if campo == "aprovacao" and re.search(r"\b(quais|quantos|quantas|lista|listar|mostra|todos|todas)\b", p):
+            apr = [l for l in linhas if self._data(v(l, "aprovacao"))]
+            apr.sort(key=lambda l: self._data_hora(v(l, "aprovacao")), reverse=True)
+            self.n.detalhe_texto = "\n".join(ficha(l) for l in apr[:60])
+            return (f"{len(apr)} dos {len(linhas)} CNPs já foram aprovados pela gerência. Os mais recentes: "
+                    + "; ".join(f"{nome(l)}, em {v(l, 'aprovacao')}" for l in apr[:5]) + ".")
+        if re.search(r"\b(quais|quantos|quantas|lista|listar|mostra|todos|todas)\b", p):
             self.n.detalhe_texto = "\n".join(ficha(l) for l in linhas[:60])
-            prim = "; ".join(f"{nome(l)}, previsto {v(l, 'prevista') or 'sem data'}" for l in linhas[:5])
-            return f"Há {len(linhas)} CNPs no sistema. Os primeiros: {prim}. A lista está na tela."
+            prim = "; ".join(f"{nome(l)}, criado em {v(l, 'criacao') or 'sem data'}" for l in linhas[:5])
+            return f"O sistema tem {len(linhas)} CNPs cadastrados. Os mais recentes: {prim}. A lista está na tela."
         return None
+
+    @staticmethod
+    def _data_hora(txt):
+        """Para ordenar: 'dd/mm/aaaa hh:mm' → (aaaa, mm, dd, hh, mm)."""
+        m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})(?:\D+(\d{1,2}):(\d{2}))?", txt or "")
+        if not m:
+            return (0, 0, 0, 0, 0)
+        return (int(m.group(3)), int(m.group(2)), int(m.group(1)), int(m.group(4) or 0), int(m.group(5) or 0))
+
+    @staticmethod
+    def _periodo(p):
+        """(início, fim, como falar) do período citado na pergunta, ou None."""
+        import datetime as dt
+        hoje = dt.date.today()
+        meses = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7, "agosto": 8,
+                 "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+        f = lambda d: d.strftime("%d/%m/%Y")
+        if re.search(r"\b(esta|essa|nesta|nessa) semana\b", p):
+            ini = hoje - dt.timedelta(days=hoje.weekday())
+            return ini, hoje, f"nesta semana (de {f(ini)} até hoje)"
+        if re.search(r"\bsemana passada\b", p):
+            ini = hoje - dt.timedelta(days=hoje.weekday() + 7)
+            return ini, ini + dt.timedelta(days=6), f"na semana passada (de {f(ini)} a {f(ini + dt.timedelta(days=6))})"
+        if re.search(r"\b(este|esse|neste|nesse) mes\b", p):
+            ini = hoje.replace(day=1)
+            return ini, hoje, f"neste mês (de {f(ini)} até hoje)"
+        if re.search(r"\bmes passado\b", p):
+            fim = hoje.replace(day=1) - dt.timedelta(days=1)
+            return fim.replace(day=1), fim, f"no mês passado ({fim:%m/%Y})"
+        mu = re.search(r"\bultimos (\d{1,3}) dias\b", p)
+        if mu:
+            ini = hoje - dt.timedelta(days=int(mu.group(1)))
+            return ini, hoje, f"nos últimos {mu.group(1)} dias (desde {f(ini)})"
+        datas = []
+        rx = (r"\b(anteontem|ontem|hoje|amanha)\b|\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b|"
+              r"\b(\d{1,2}) de (" + "|".join(meses) + r")\b|\bdia (\d{1,2})\b(?!\s*[/\-.]\d)")
+        for m in re.finditer(rx, p):
+            try:
+                if m.group(1):
+                    d = hoje + dt.timedelta(days={"anteontem": -2, "ontem": -1, "hoje": 0, "amanha": 1}[m.group(1)])
+                elif m.group(2):
+                    ano = int(m.group(4)) if m.group(4) else hoje.year
+                    d = dt.date(ano + 2000 if ano < 100 else ano, int(m.group(3)), int(m.group(2)))
+                elif m.group(5):
+                    d = dt.date(hoje.year, meses[m.group(6)], int(m.group(5)))
+                else:
+                    dd = int(m.group(7))
+                    d = dt.date(hoje.year, hoje.month, dd)
+                    if d > hoje:
+                        d = (d.replace(day=1) - dt.timedelta(days=1)).replace(day=dd)
+                datas.append(d)
+            except ValueError:
+                pass
+        if not datas:
+            return None
+        if len(datas) >= 2 and re.search(r"\b(ate|entre|desde|a partir|de|do)\b", p):
+            ini, fim = min(datas[:2]), max(datas[:2])
+            return ini, fim, f"de {f(ini)} até {'hoje' if fim == hoje else f(fim)}"
+        if re.search(r"\b(desde|a partir d[eo]|depois d[eo])\b|\bate hoje\b|\bate agora\b", p):
+            ini = datas[0]
+            return ini, hoje, f"de {f(ini)} até hoje"
+        d = datas[0]
+        nome = {hoje: "hoje", hoje - dt.timedelta(days=1): "ontem", hoje - dt.timedelta(days=2): "anteontem",
+                hoje + dt.timedelta(days=1): "amanhã"}.get(d)
+        return d, d, (f"{nome} ({f(d)})" if nome else f"em {f(d)}")
 
     def contexto(self, pergunta):
         """(sistema, texto) para a IA. Em caso de erro/login, o texto explica o problema."""
