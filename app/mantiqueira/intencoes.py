@@ -371,11 +371,13 @@ class Intencoes:
             if origem != "rede" or not apel:
                 continue
             palavras = [w for w in re.findall(r"[a-z0-9]+", textutil.sem_acento(apel.lower())) if len(w) >= 4 and w != "file"]
-            for w in palavras:
-                m = re.search(r"\b(no|na|em|do|da|dentro do|dentro da)\s+(?:(?:file|fail|faile|fala|arquivo|pasta|servidor)\s*[-_ ]?\s*)?"
-                              + re.escape(w) + r"\b", p)
-                if m:
-                    return raiz, f" no {apel.replace('_', ' ').replace('-', ' ')}", p[:m.start()] + " " + p[m.end():]
+            # 1º "no file projetos" (com "file"); só depois "no projetos" sozinho — "na pasta projetos" é uma PASTA, não a unidade
+            for exige in (True, False):
+                for w in palavras:
+                    pref = r"(?:file|fail|faile|fala|servidor)\s*[-_ ]?\s*" if exige else r"(?<!pasta )"
+                    m = re.search(r"\b(no|na|em|do|da|dentro do|dentro da)\s+" + pref + re.escape(w) + r"\b", p)
+                    if m and not (not exige and re.search(r"\bpasta\s*$", p[:m.start()])):
+                        return raiz, f" no {apel.replace('_', ' ').replace('-', ' ')}", p[:m.start()] + " " + p[m.end():]
         m = re.search(r"\b(no|na|em) (unidade |disco |drive )?([a-z])\b(?! de)", p)
         if m and m.group(3) in "cdefghijklmnopqrstuvwxyz" and any(r[0].lower().startswith(m.group(3)) for r in locais):
             raiz = m.group(3).upper() + ":\\"
@@ -389,6 +391,34 @@ class Intencoes:
             if m:
                 return onde, txt, p[:m.start()] + " " + p[m.end():]
         return "tudo", "", p
+
+    @staticmethod
+    def _pastas_citadas(p):
+        """'dentro de engenharia na pasta projetos' → (['engenharia', 'projetos'], frase sem essas partes)."""
+        dicas = []
+        fim = r"(?=\s+(?:na|no|da|do|de|dentro|que|em|e)\b|\s*$)"
+        rx = re.compile(r"\b(?:dentro d[aeo]s?|na pasta|no diretorio|da pasta|na subpasta|pasta)\s+(?:pasta\s+)?([a-z0-9][a-z0-9 _\-]*?)" + fim)
+        while True:
+            m = rx.search(p)
+            if not m:
+                break
+            dicas.append(m.group(1).strip())
+            fim_m = m.end()
+            p = p[:m.start()] + " " + p[fim_m:]
+            # encadeado: "na pasta projetos da engenharia"
+            while True:
+                m2 = re.match(r"\s*(?:da|do|de|dentro da|dentro do)\s+(?:pasta\s+)?([a-z0-9][a-z0-9 _\-]*?)" + fim, p[m.start():])
+                if not m2 or m2.group(1) in ("arquivo", "computador", "rede"):
+                    break
+                dicas.append(m2.group(1).strip())
+                p = p[:m.start()] + " " + p[m.start() + m2.end():]
+        p = re.sub(r"\bque (esta|ta|fica|ficam|estao)\b", " ", p)
+        return [d for d in dicas if d], p
+
+    @staticmethod
+    def _na_pasta(caminho, dicas):
+        partes = [textutil.sem_acento(x.lower()).strip() for x in re.split(r"[\\/]", caminho)[:-1]]
+        return all(any(d == x or d in x.split() or x.startswith(d) for x in partes) for d in dicas)
 
     @staticmethod
     def _tipo(p):
@@ -412,11 +442,16 @@ class Intencoes:
         if not ix:
             return f"Ainda estou preparando o mapa de arquivos, {self._trat()}."
         onde, lugar, resto = self._onde(p)
+        dicas, resto = self._pastas_citadas(resto)
         exts, resto = self._tipo(resto)
         consulta = re.sub(r"\s+", " ", RX_LIXO.sub(" ", resto)).strip()
         if len(consulta) < 2:
             return f"O que o {self._trat()} quer que eu procure?"
-        exatos, parecidos = ix.buscar(consulta, onde, limite=6, exts=exts)
+        exatos, parecidos = ix.buscar(consulta, onde, limite=60 if dicas else 6, exts=exts)
+        if dicas:
+            exatos = [r for r in exatos if self._na_pasta(r["caminho"], dicas)][:6]
+            parecidos = [r for r in parecidos if self._na_pasta(r["caminho"], dicas)][:6]
+            lugar = f" dentro de {' / '.join(dicas)}{lugar}"
         self.consulta, self.quando_busca = consulta, time.time()
         self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
                              "achou": len(exatos), "parecidos": len(parecidos)}
@@ -498,6 +533,7 @@ class Intencoes:
             return f"Abrindo {os.path.basename(caminho.rstrip(chr(92))) or caminho}."
         ix = self.n.indice
         onde, lugar, resto = self._onde(p)
+        dicas, resto = self._pastas_citadas(resto)
         exts, resto = self._tipo(resto)
         resto = RX_ABRIR.sub(" ", resto)
         consulta = re.sub(r"\s+", " ", RX_LIXO.sub(" ", resto)).strip()
@@ -515,7 +551,11 @@ class Intencoes:
         if len(consulta) < 2:
             return f"Qual arquivo o {self._trat()} quer que eu abra?"
         tipo_txt = (" " + NOME_TIPO.get(exts[0], "")) if exts else ""
-        exatos, parecidos = ix.buscar(consulta, onde, limite=6, exts=exts) if ix else ([], [])
+        exatos, parecidos = ix.buscar(consulta, onde, limite=60 if dicas else 6, exts=exts) if ix else ([], [])
+        if dicas:
+            exatos = [r for r in exatos if self._na_pasta(r["caminho"], dicas)][:6]
+            parecidos = [r for r in parecidos if self._na_pasta(r["caminho"], dicas)][:6]
+            lugar = f" dentro de {' / '.join(dicas)}{lugar}"
         if not exatos and not parecidos and self.n.olhos:
             c = self.n.olhos.recentes.achar(consulta)          # mapa ainda não pronto: tenta os recentes
             if c and (not exts or os.path.splitext(c)[1].lower() in exts):

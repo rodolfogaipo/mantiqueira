@@ -734,7 +734,19 @@ def _():
     r2 = it.tratar("na engenharia no file projetos tem quais pastas inicialmente?", [])
     assert "4 pastas" in r1 and "ENGENHARIA" in r1 and "um arquivo" in r1, r1
     assert "2 pastas" in r2 and "LASER" in r2, r2
-    print(f"::notice title=Pastas::{r1} %0A{r2}", flush=True)
+    import mantiqueira.intencoes as I
+    abertos = []
+    I.os.startfile = lambda c: abertos.append(c)
+    for d, f in [("ENGENHARIA/PROJETOS/MESA LUNA", "MESA LUNA OVAL.pdf"), ("ENGENHARIA/PROJETOS/MESA LUNA", "MESA LUNA OVAL.SLDASM"),
+                 ("ENGENHARIA/LASER", "MESA LUNA OVAL.dxf"), ("ATELIÊ/PROJETOS", "MESA LUNA OVAL.pdf")]:
+        (Z / d).mkdir(parents=True, exist_ok=True)
+        (Z / d / f).write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    r3 = it.tratar("abre o pdf da mesa luna oval que está dentro de engenharia na pasta projetos no file projetos", [])
+    assert abertos and abertos[-1].replace("\\", "/").endswith("ENGENHARIA/PROJETOS/MESA LUNA/MESA LUNA OVAL.pdf"), (r3, abertos)
+    r4 = it.tratar("abre a mesa luna oval na pasta laser", [])
+    assert abertos[-1].endswith(".dxf"), (r4, abertos)
+    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4}", flush=True)
 
 
 @etapa("conversas de teste (secretário)")
