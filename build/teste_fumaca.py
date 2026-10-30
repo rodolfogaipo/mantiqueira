@@ -802,7 +802,17 @@ def _():
     antes = len(abertos)
     r10 = it.tratar("abre o 2 e o 4", [])
     assert len(abertos) - antes == 2, (r10, abertos[antes:])
-    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10}", flush=True)
+    from mantiqueira.sistemas_web import SistemasWeb
+    impressos = []
+    SistemasWeb.imprimir = staticmethod(lambda a, i=None: impressos.append((os.path.basename(str(a)), i)))
+    SistemasWeb.impressoras = staticmethod(lambda: ["HP LaserJet M1212nf (ENGENHARIA)", "IMPRESSORA PCP"])
+    n.sistemas = SistemasWeb(n)
+    n.ultima = {}; n.voz = None; n.em_silencio = lambda: False
+    r11 = it.tratar("imprime todos os pdfs da espreguiçadeira aura no file projetos", [])
+    assert len(impressos) == 4 and r11.startswith("Mandei imprimir 4"), (r11, impressos)
+    r12 = it.tratar("imprime o pdf da espreguiçadeira alemanha na impressora pcp", [])
+    assert impressos[-1] == ("ESPREGUIÇADEIRA ALEMANHA.PDF", "IMPRESSORA PCP"), (r12, impressos[-1])
+    print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)
 
 
 @etapa("conversas de teste (secretário)")

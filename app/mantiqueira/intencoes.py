@@ -91,6 +91,14 @@ class Intencoes:
 
     # ------------------------------------------------------------------ roteador
     def tratar(self, pergunta, historico):
+        r = self._tratar(pergunta, historico)
+        if getattr(self, "_acao", "abrir") == "imprimir" and r:
+            r = re.sub(r"^Abrindo (\d+) arquivos", r"Mandei imprimir \1 arquivos", r)
+            r = re.sub(r"^Abrindo ", "Mandei imprimir ", r)
+        self._acao = "abrir"
+        return r
+
+    def _tratar(self, pergunta, historico):
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
         for f in (self.parar, self.imprimir_pedido, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
@@ -101,6 +109,8 @@ class Intencoes:
                 log.exception("intenção %s", f.__name__)
                 r = None
             if r:
+                if f in (self.abrir_pedido, self.buscar, self.conteudo_pasta) and getattr(self, "_acao", "abrir") == "abrir":
+                    self._acao_lista, self._impressora_lista = "abrir", None     # lista nova de abrir
                 return r
         return None
 
@@ -489,6 +499,8 @@ class Intencoes:
             return None
         if RX_IMPRIMIR.search(p):
             return None
+        self._acao = getattr(self, "_acao_lista", "abrir")     # lista que veio de "imprime …": "o 2" imprime
+        self._impressora_atual = getattr(self, "_impressora_lista", None)
         if not re.search(r"\b(abr[ea]|abrir|pode abrir|sim|isso|esse|essa|esse mesmo|o primeiro|o segundo|o terceiro|"
                          r"a primeira|a segunda|a pasta|mostra a pasta|onde fica a pasta|primeiro|segundo|terceiro|quarto|quinto|"
                          r"ultimo|todos|todas|ambos|ambas|\d{1,2})\b", p):
@@ -534,7 +546,7 @@ class Intencoes:
                 if "pasta" in p:
                     subprocess.Popen(["explorer", "/select,", r["caminho"]])
                 else:
-                    os.startfile(r["caminho"])
+                    self._usar(r["caminho"])
                 time.sleep(0.3)
             self.ultimo_caminho = lista[-1]["caminho"]
             self.resultados = []
@@ -559,7 +571,7 @@ class Intencoes:
             subprocess.Popen(["explorer", "/select,", r["caminho"]])
             self.resultados = []
             return f"Abri a pasta de {r['nome']}."
-        os.startfile(r["caminho"])
+        self._usar(r["caminho"])
         self.resultados = []
         if self.n.memoria and not r["eh_pasta"]:
             self.n.memoria.adicionar(f"O arquivo {r['nome']} fica em {r['pasta']}")
@@ -623,7 +635,7 @@ class Intencoes:
         if not exatos and not parecidos and self.n.olhos:
             c = self.n.olhos.recentes.achar(consulta)          # mapa ainda não pronto: tenta os recentes
             if c and (not exts or os.path.splitext(c)[1].lower() in exts):
-                os.startfile(c)
+                self._usar(c)
                 return f"Abrindo {os.path.basename(c)}."
         self.consulta, self.quando_busca = consulta, time.time()
         self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
@@ -632,7 +644,7 @@ class Intencoes:
             # "abre todos os PDFs da espreguiçadeira aura"
             lista = exatos[:15] if len(exatos) <= 15 else exatos[:15]
             for r in lista:
-                os.startfile(r["caminho"])
+                self._usar(r["caminho"])
                 time.sleep(0.3)
             self.resultados = []
             return f"Abrindo {len(lista)} arquivos: " + "; ".join(r["nome"] for r in lista) + "."
@@ -646,14 +658,14 @@ class Intencoes:
             if ix:
                 ix.lembrar_escolha(consulta, r["caminho"])
             self.ultimo_caminho = r["caminho"]
-            os.startfile(r["caminho"])
+            self._usar(r["caminho"])
             self.resultados = []
             return f"Abrindo {r['nome']}."
         if exatos:
             pref = [r for r in exatos if ix and ix.q("SELECT vezes FROM preferidos WHERE consulta=? AND caminho=? AND vezes>=2",
                                                         (consulta, r["caminho"]))]
             if len(pref) == 1:
-                os.startfile(pref[0]["caminho"])
+                self._usar(pref[0]["caminho"])
                 self.resultados = []
                 return f"Abrindo {pref[0]['nome']}, o mesmo que o {self._trat()} costuma abrir."
             self.resultados = exatos
@@ -912,6 +924,15 @@ class Intencoes:
         cands = sorted(iguais or cands, key=lambda r: r["caminho"].count("\\"))
         return cands[0]["caminho"] if cands else None
 
+    def _usar(self, caminho):
+        """Abre o arquivo — ou manda imprimir, quando o pedido foi de impressão."""
+        if getattr(self, "_acao", "abrir") == "imprimir":
+            from .sistemas_web import SistemasWeb
+            SistemasWeb.imprimir(caminho, getattr(self, "_impressora_atual", None))
+            time.sleep(1.5)
+        else:
+            os.startfile(caminho)
+
     # ------------------------------------------------------------------ imprimir / gerar PDF (CNPs e arquivos achados)
     @staticmethod
     def _selecao(p, total):
@@ -962,25 +983,57 @@ class Intencoes:
         lista_cnp = getattr(sw, "ultima_lista", []) if sw else []
         recente_cnp = bool(u and time.time() - u["t"] < 900 and lista_cnp)
         fala_cnp = bool(re.search(r"\bcnps?\b|\borigus\b", p))
-        # 1) arquivos que acabei de achar ("imprime todos" depois de uma busca)
-        if imprimir and not fala_cnp and self.resultados and time.time() - self.quando_busca < 600 and \
+        # o que sobra da frase tirando "imprime", impressora, números e palavras de escolha: se sobrar um nome, é um pedido novo
+        sobra = re.sub(r"\b(imprim\w*|impressao|gera\w*|gere|salva\w*|cria\w*|faz|faca|fazer|exporta\w*|tira|tire|pdfs?|em|com|"
+                       r"sem|foto|fotos|pra|para|mim|me|o|a|os|as|um|uma|de|do|da|dos|das|e|todos|todas|tudo|ambos|ambas|eles|elas|"
+                       r"esse|essa|este|esta|isso|dele|dela|ele|ela|dois|duas|tres|primeir[oa]s?|segund[oa]s?|terceir[oa]s?|"
+                       r"quart[oa]s?|quint[oa]s?|ultim[oa]s?|numero|n|por|favor|mantiqueira|agora|ai|la|quero|que|voce|vc|"
+                       r"arquivos?|\d{1,2})\b", " ", re.sub(r"\bna (impressora|maquina)\b.*$", " ", p))
+        sobra = re.sub(r"\s+", " ", sobra).strip()
+        # 1) arquivos que acabei de achar ("imprime todos" / "imprime o 2" depois de uma busca)
+        if imprimir and not fala_cnp and not sobra and self.resultados and time.time() - self.quando_busca < 600 and \
                 not (recente_cnp and u["t"] > self.quando_busca):
             sel = self._selecao(p, len(self.resultados))
             if sel is None:
                 sel = [0] if len(self.resultados) == 1 else None
             if sel is None:
+                self._acao_lista = "imprimir"
                 return f"Qual deles eu imprimo, {self._trat()}? Diga o número, ou \"imprime todos\"."
             impressora, erro = self._impressora(p, sw)
             if erro:
                 return erro
             arqs = [self.resultados[i] for i in sel if not self.resultados[i]["eh_pasta"]][:20]
+            from .sistemas_web import SistemasWeb
             for r in arqs:
-                from .sistemas_web import SistemasWeb
                 SistemasWeb.imprimir(r["caminho"], impressora)
                 time.sleep(1.5)
             self.resultados = []
             return (f"Mandei imprimir {len(arqs)} arquivo{'s' if len(arqs) > 1 else ''}"
-                    f"{' na ' + impressora if impressora else ''}: " + "; ".join(r["nome"] for r in arqs) + ".")
+                    f"{' na ' + impressora if impressora else ' na impressora padrão'}: " + "; ".join(r["nome"] for r in arqs) + ".")
+        # 1b) arquivo pelo nome, no computador, pendrive, File Projetos ou File Aluminas: "imprime o pdf da mesa luna"
+        if imprimir and not fala_cnp and sobra and not (recente_cnp and not sobra):
+            impressora, erro = self._impressora(p, sw)
+            if erro:
+                return erro
+            p2 = re.sub(r"\bna (impressora|maquina)\b.*$", " ", p)
+            p2 = re.sub(r"\b(imprim\w*|manda imprimir)\b", "abre", p2, count=1)
+            self._acao, self._impressora_atual = "imprimir", impressora
+            try:
+                r = self.abrir_pedido(p2, original)
+            finally:
+                self._acao = "abrir"
+            if not r:
+                return None
+            if self.resultados:
+                self._acao_lista = "imprimir"
+                self._impressora_lista = impressora
+            r = r.replace("Qual deles eu abro?", "Qual deles eu imprimo? Diga o número, ou \"imprime todos\".")
+            r = re.sub(r"^Abrindo (\d+) arquivos", r"Mandei imprimir \1 arquivos", r)
+            r = re.sub(r"^Abrindo ", "Mandei imprimir ", r)
+            r = r.replace("Não abri nada", "Não imprimi nada")
+            if r.startswith("Mandei imprimir"):
+                r = r.rstrip(".") + (f", na {impressora}." if impressora else ", na impressora padrão.")
+            return r
         # 2) CNPs do sistema
         if not sw or not (fala_cnp or recente_cnp):
             return None
