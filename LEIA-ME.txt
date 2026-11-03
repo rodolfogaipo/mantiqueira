@@ -111,6 +111,12 @@ IMPRIMIR / PDF DE CNP
 - Depois de achar arquivos: "imprime todos" / "imprime o 2".
 - "abra os arquivos" / "abre eles" depois de uma lista abre TODOS da lista;
   "abra os arquivos em PDF da espreguiçadeira aura" abre todos de uma vez.
+- LISTA DE PROJETOS de uma vez (separados por vírgula, "e" ou um por linha):
+  "abre os PDFs da mesa luna, espreguiçadeira aura e banco lins no File Projetos",
+  "abre as montagens do banco lins e da mesa luna", "imprime os PDFs desses: ...".
+  Sem dizer o tipo, ele abre os que têm um arquivo só e pergunta dos outros;
+  aí é só responder "os PDFs" ou "as montagens". No fim ele diz o que não achou.
+  Máximo de 15 arquivos por pedido.
 
 PROGRAMAS E COMANDOS DO COMPUTADOR
 - "abre o SolidWorks", "abre o Excel", "abre o Gaipo Nest", "abre a calculadora",

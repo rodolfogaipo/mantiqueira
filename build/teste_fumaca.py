@@ -846,6 +846,32 @@ def _():
     r15 = it.tratar("abre todos", [])
     novos = [os.path.basename(x) for x in abertos[antes:]]
     assert novos and all("AURA" in x for x in novos) and not any(x == "ESPREGUIÇADEIRA AURA" for x in novos), (r15, novos)
+    # lista de projetos de uma vez
+    d3 = Z / "ENGENHARIA/PROJETOS/BANCO LINS"
+    d3.mkdir(parents=True, exist_ok=True)
+    for f in ["BANCO LINS.pdf", "BANCO LINS.SLDASM", "PE BANCO LINS.SLDPRT"]:
+        (d3 / f).write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    antes = len(abertos)
+    rl1 = it.tratar("abre os pdfs da mesa luna oval, espreguiçadeira alemanha, banco lins e mesa xpto no file projetos", [])
+    novos = [os.path.basename(x) for x in abertos[antes:]]
+    assert all(x.lower().endswith(".pdf") for x in novos) and "BANCO LINS.pdf" in novos and \
+        "ESPREGUIÇADEIRA ALEMANHA.PDF" in novos and "MESA LUNA OVAL.pdf" in novos and "Não achei: mesa xpto" in rl1 and \
+        "PLANO DE CORTE ESPREGUIÇADEIRA ALEMANHA.PDF" not in novos, (rl1, novos)
+    antes = len(abertos)
+    rl2 = it.tratar("abre banco lins e espreguiçadeira alemanha", [])
+    assert "banco lins" in rl2 and "Diga o tipo" in rl2, rl2
+    rl3 = it.tratar("as montagens", [])
+    novos = [os.path.basename(x) for x in abertos[antes:]]
+    assert "BANCO LINS.SLDASM" in novos and all(not x.lower().endswith(".pdf") for x in novos[-1:]), (rl2, rl3, novos)
+    antes = len(abertos)
+    rl4 = it.tratar("abre o pdf e a montagem da mesa luna oval", [])
+    assert len(abertos) - antes <= 1, (rl4, abertos[antes:])
+    antes_i = len(impressos)
+    rl5 = it.tratar("imprime os pdfs do banco lins e da espreguiçadeira alemanha", [])
+    assert [x[0] for x in impressos[antes_i:]] == ["BANCO LINS.pdf", "ESPREGUIÇADEIRA ALEMANHA.PDF"] and \
+        rl5.startswith("Mandei imprimir"), (rl5, impressos[antes_i:])
+    print(f"::notice title=Lista::{rl1} %0A{rl2} %0A{rl3} %0A{rl4} %0A{rl5}", flush=True)
     print(f"::notice title=Aura::{rb} %0A{r13} %0A{r14} %0A{r15}", flush=True)
     print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)
 

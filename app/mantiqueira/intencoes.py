@@ -104,8 +104,8 @@ class Intencoes:
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
         p = re.sub(r"(?<=[a-z])\d(?=[a-z])", "", p)              # "espreguicade3ira": tecla a mais no meio da palavra
         for f in (self.confirmar_energia, self.parar, self.imprimir_pedido, self.computador, self.peca_solidworks, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
-                  self.programa, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
-                  self.conteudo_pasta, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
+                  self.programa, self.lista_tipo, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
+                  self.conteudo_pasta, self.abrir_lista, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
                 r = f(p, pergunta)
             except Exception:
@@ -1051,7 +1051,7 @@ class Intencoes:
             p2 = re.sub(r"\b(imprim\w*|manda imprimir)\b", "abre", p2, count=1)
             self._acao, self._impressora_atual = "imprimir", impressora
             try:
-                r = self.abrir_pedido(p2, original)
+                r = self.abrir_lista(p2, original) or self.abrir_pedido(p2, original)
             finally:
                 self._acao = "abrir"
             if not r:
@@ -1357,3 +1357,105 @@ class Intencoes:
             log.exception("peça no SolidWorks")
             return f"Não consegui fazer a peça no SolidWorks, {self._trat()}. O SolidWorks respondeu: {str(e)[:120]}"
         return msg
+
+    # ------------------------------------------------------------------ lista de projetos: "abre os PDFs da mesa luna, aura e banco lins"
+    def _itens_lista(self, resto):
+        resto = re.sub(r"\b(todos|todas)\s+(os|as)\b|\b(desses|destes|dessas|destas|dos seguintes|das seguintes|seguintes|"
+                       r"abaixo|da lista|dessa lista|desta lista|projetos|produtos|arquivos)\b|:", " ", resto)
+        partes = re.split(r"\n+|;|(?<!\d),|,(?!\d)|\s+e\s+", resto)
+        itens = []
+        for x in partes:
+            x = re.sub(r"\s+", " ", x).strip(" -•*.")
+            while True:
+                y = re.sub(r"^(o|a|os|as|da|do|das|dos|de|e|um|uma|tambem|mais)\s+", "", x)
+                if y == x:
+                    break
+                x = y
+            x = re.sub(r"\s+", " ", re.sub(r"\b(pra mim|para mim|por favor|mantiqueira|pdfs?)\b", " ", x)).strip()
+            if x:
+                itens.append(x)
+        return itens
+
+    def abrir_lista(self, p, original, itens=None, onde=None, lugar=None, exts=None):
+        """Vários nomes de uma vez. Cada um é procurado separado; o lugar e o tipo valem para todos."""
+        ix = self.n.indice
+        if itens is None:
+            if not RX_ABRIR.search(p) or textutil.pede_lembrete(p) or not ix:
+                return None
+            if not re.search(r"\n|;|,|\s+e\s+", p):
+                return None
+            onde, lugar, resto = self._onde(p)
+            dicas, resto = self._pastas_citadas(resto)
+            if dicas:
+                return None                                     # "na pasta X da Y" é um caminho, não uma lista
+            exts, resto = self._tipo(resto)
+            resto = RX_ABRIR.sub(" ", resto, count=1)
+            itens = self._itens_lista(resto)
+            if len(itens) < 2 or any(len(x) < 3 for x in itens):
+                return None
+        pastas = bool(re.search(r"\bpastas?\b", p))
+        abrir, varias, nao = [], [], []
+        for item in itens[:20]:
+            ex, par = ix.buscar(item, onde, limite=60, exts=exts)
+            ex = [r for r in ex if bool(r["eh_pasta"]) == pastas]
+            if not ex:
+                nao.append(item)
+                continue
+            iguais = [r for r in ex if re.sub(r"\s+", " ", textutil.sem_acento(os.path.splitext(r["nome"])[0].lower())).strip() == item]
+            if exts and not pastas:
+                abrir += iguais or ex                           # "os PDFs desses": o de nome igual; senão todos daquele tipo
+            elif len(iguais) == 1:
+                abrir.append(iguais[0])
+            elif len(ex) == 1:
+                abrir.append(ex[0])
+            else:
+                varias.append((item, ex))
+        if not abrir and not varias:
+            self.resultados = []
+            return (f"Não achei nenhum{(' ' + NOME_TIPO.get(exts[0], '')) if exts else ''} desses{lugar}, {self._trat()}: "
+                    + ", ".join(nao) + ". Não abri nada.")
+        vistos, lista = set(), []
+        for r in abrir:
+            if r["caminho"] not in vistos:
+                vistos.add(r["caminho"])
+                lista.append(r)
+        total = len(lista)
+        for r in lista[:15]:
+            if pastas:
+                os.startfile(r["caminho"])
+            else:
+                self._usar(r["caminho"])
+            time.sleep(0.3)
+        partes = []
+        if lista:
+            partes.append(f"Abrindo {min(total, 15)} arquivo{'s' if total > 1 else ''}" + (f" (de {total}; abri os 15 primeiros)" if total > 15 else "")
+                          + ": " + "; ".join(r["nome"] for r in lista[:15]) + ".")
+            self.ultimo_caminho = lista[min(total, 15) - 1]["caminho"]
+        if nao:
+            partes.append("Não achei: " + ", ".join(nao) + ".")
+        self.resultados = []
+        self._lista_pendente = None
+        if varias:
+            nomes = ", ".join(f"{it_} ({len(ex)} arquivos)" for it_, ex in varias)
+            partes.append(f"Estes têm mais de um arquivo e não abri: {nomes}. Diga o tipo, por exemplo: os PDFs, ou as montagens.")
+            self._lista_pendente = {"itens": [it_ for it_, _ in varias], "onde": onde, "lugar": lugar, "t": time.time()}
+            if len(varias) == 1:
+                self.resultados = varias[0][1]
+                self.quando_busca = time.time()
+                self.consulta = varias[0][0]
+                self.ultima_busca = {"consulta": varias[0][0], "onde": onde, "exts": None, "lugar": lugar,
+                                     "achou": len(varias[0][1]), "parecidos": 0}
+                self.n.detalhe_texto = "\n".join(f"{i + 1}. {r['caminho']}" for i, r in enumerate(varias[0][1][:8]))
+        return " ".join(partes)
+
+    def lista_tipo(self, p, original):
+        """Resposta curta depois de uma lista com dúvidas: "os PDFs", "as montagens"."""
+        lp = getattr(self, "_lista_pendente", None)
+        if not lp or time.time() - lp["t"] > 600:
+            return None
+        exts, resto = self._tipo(p)
+        resto = re.sub(r"\b(abre|abra|abrir|os|as|o|a|todos|todas|entao|pode|desses|deles|delas|quero|so|mantiqueira)\b", " ", resto)
+        if not exts or resto.strip():
+            return None
+        self._lista_pendente = None
+        return self.abrir_lista(p, original, itens=lp["itens"], onde=lp["onde"], lugar=lp["lugar"], exts=exts)
