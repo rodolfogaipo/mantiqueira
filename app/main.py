@@ -17,6 +17,17 @@ logging.basicConfig(filename=str(paths.DADOS / "mantiqueira.log"), level=logging
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("main")
 
+# se o programa cair de vez (erro dentro do Windows/placa/som), grava onde foi, para dar para corrigir
+try:
+    import faulthandler
+    import time as _t
+    _falha = open(paths.DADOS / "falha.log", "a", encoding="utf-8")
+    _falha.write(f"\n==== {VERSAO} iniciado {_t.strftime('%Y-%m-%d %H:%M:%S')} ====\n")
+    _falha.flush()
+    faulthandler.enable(file=_falha, all_threads=True)
+except Exception:
+    pass
+
 
 def aviso(texto, erro=True):
     try:

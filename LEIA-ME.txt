@@ -109,6 +109,8 @@ IMPRIMIR / PDF DE CNP
   Documentos\Mantiqueira\CNPs. Ele só usa a página "Imprimir" do sistema;
   não altera nada.
 - Depois de achar arquivos: "imprime todos" / "imprime o 2".
+- "abra os arquivos" / "abre eles" depois de uma lista abre TODOS da lista;
+  "abra os arquivos em PDF da espreguiçadeira aura" abre todos de uma vez.
 
 PROGRAMAS E COMANDOS DO COMPUTADOR
 - "abre o SolidWorks", "abre o Excel", "abre o Gaipo Nest", "abre a calculadora",

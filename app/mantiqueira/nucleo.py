@@ -301,12 +301,13 @@ class Nucleo:
                 self._liberar()
 
     def _processar(self, texto, origem):
+        log.info("PEDIDO (%s): %s", origem, texto[:300])
+        self.db.conversa_add("usuario", texto)        # vai para o histórico antes de qualquer outra coisa
         if self.voz and getattr(self.voz, "falando", False):
             self.voz.parar()                 # pedido novo: cala a resposta anterior na hora
         self.estado = "pensando"
         self.ultima = {"usuario": texto, "assistente": "", "detalhe": ""}
         self.detalhe_texto = ""
-        self.db.conversa_add("usuario", texto)
         try:
             resposta = self.cerebro.processar(texto) if self.cerebro else "Ainda estou iniciando."
         except Exception:

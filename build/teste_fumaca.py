@@ -802,6 +802,17 @@ def _():
     antes = len(abertos)
     r10 = it.tratar("abre o 2 e o 4", [])
     assert len(abertos) - antes == 2, (r10, abertos[antes:])
+    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    antes = len(abertos)
+    r10b = it.tratar("abra os arquivos", [])
+    assert len(abertos) - antes == 4, (r10b, abertos[antes:])
+    antes = len(abertos)
+    r10c = it.tratar("abra os arquivos em pdf espreguiçadeira aura no file projetos", [])
+    assert len(abertos) - antes == 4, (r10c, abertos[antes:])
+    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    antes = len(abertos)
+    r10d = it.tratar("abre os dois primeiros", [])
+    assert len(abertos) - antes == 2, (r10d, abertos[antes:])
     from mantiqueira.sistemas_web import SistemasWeb
     impressos = []
     SistemasWeb.imprimir = staticmethod(lambda a, i=None: impressos.append((os.path.basename(str(a)), i)))
@@ -813,6 +824,48 @@ def _():
     r12 = it.tratar("imprime o pdf da espreguiçadeira alemanha na impressora pcp", [])
     assert impressos[-1] == ("ESPREGUIÇADEIRA ALEMANHA.PDF", "IMPRESSORA PCP"), (r12, impressos[-1])
     print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)
+
+
+@etapa("voz: pedido novo para a fala na hora, sem derrubar o programa")
+def _():
+    import threading
+    import numpy as np
+    import sounddevice
+    from mantiqueira import voz as V
+    escritos = []
+
+    class Saida:
+        def __init__(self, **kw):
+            self.kw = kw
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            escritos.append("fechou")
+        def write(self, d):
+            escritos.append(len(d))
+            time.sleep(len(d) / self.kw["samplerate"])
+    orig = sounddevice.OutputStream
+    sounddevice.OutputStream = Saida
+    try:
+        v = V.Voz.__new__(V.Voz)
+        v._parar = False
+        v.q = __import__("queue").Queue()
+
+        class N:
+            cfg = {"voz_volume": 1.0}
+        v.n = N()
+        t = threading.Thread(target=v._tocar, args=(np.zeros(24000 * 5, dtype=np.float32), 24000))
+        t0 = time.time()
+        t.start()
+        time.sleep(0.35)
+        v.parar()                                   # outra linha pede para parar (como um pedido novo)
+        t.join(3)
+        assert not t.is_alive() and time.time() - t0 < 1.0, time.time() - t0
+        assert escritos[-1] == "fechou" and 2 <= len(escritos) - 1 <= 6, escritos
+    finally:
+        sounddevice.OutputStream = orig
+    import inspect
+    assert "sd.stop" not in inspect.getsource(V.Voz.parar).split('"""')[-1].split("#")[0]
 
 
 @etapa("programas: abrir/fechar/digitar no Windows de verdade")

@@ -34,6 +34,8 @@ PARAR_RESTO = {"quero", "precisa", "pra", "la", "isso", "nada", "obrigado", "obr
                "por", "favor", "de", "falar", "senhor", "tudo", "bem", "e", "o", "a", "ja", "pode", "nao"}
 RX_IMPRIMIR = re.compile(r"\bimprim\w*|\bimpressao\b|\b(gera|gere|gerar|salva|salve|salvar|cria|crie|criar|faz|faca|fazer|"
                          r"exporta|exporte|exportar|tira|tire)\w*\b.{0,40}\bpdfs?\b|\bem pdf\b|\bo pdf d[aeo]s? cnps?\b")
+RX_TODOS = re.compile(r"\b(todos|todas)\b|\b(?:os|as)\s+(?:(?!dois\b|duas\b|tres\b|\d)\w+\s+)?(arquivos|pdfs|planilhas|desenhos|documentos|dxfs|dwgs|"
+                      r"montagens|pecas|projetos)\b")
 RX_ABRIR = re.compile(r"\b(abre|abra|abrir|abrindo|abri)\b")
 # tipo de arquivo citado → extensões aceitas
 TIPOS = [
@@ -517,7 +519,7 @@ class Intencoes:
         # "abre todos" / "abre os dois" / "abre o 1 e o 3"
         escolhidos = None
         self._idx_unico = None
-        if re.search(r"\b(todos|todas|tudo|ambos|ambas)\b", p):
+        if re.search(r"\b(todos|todas|tudo|ambos|ambas|eles|elas|esses|essas|estes|estas)\b", p) or RX_TODOS.search(p):
             escolhidos = list(range(len(self.resultados)))
         else:
             mm = re.search(r"\b(?:os|as) (dois|duas|tres) primeir[oa]s\b|\b(?:os|as) (dois|duas|tres)\b", p)
@@ -629,7 +631,7 @@ class Intencoes:
         if len(consulta) < 2:
             return f"Qual arquivo o {self._trat()} quer que eu abra?"
         tipo_txt = (" " + NOME_TIPO.get(exts[0], "")) if exts else ""
-        todos = bool(re.search(r"\b(todos|todas)\b", p))
+        todos = bool(RX_TODOS.search(p))
         exatos, parecidos = ix.buscar(consulta, onde, limite=60 if (dicas or todos) else 6, exts=exts) if ix else ([], [])
         if dicas:
             exatos = [r for r in exatos if self._na_pasta(r["caminho"], dicas)][:6]
@@ -643,7 +645,7 @@ class Intencoes:
         self.consulta, self.quando_busca = consulta, time.time()
         self.ultima_busca = {"consulta": consulta, "onde": onde, "exts": exts, "lugar": lugar,
                              "achou": len(exatos), "parecidos": len(parecidos)}
-        if re.search(r"\b(todos|todas)\b", p) and exatos:
+        if todos and exatos:
             # "abre todos os PDFs da espreguiçadeira aura"
             lista = exatos[:15] if len(exatos) <= 15 else exatos[:15]
             for r in lista:
@@ -1262,6 +1264,10 @@ class Intencoes:
         if self._apelido_na_frase(p):
             return None                                         # apelido dele vale mais
         verbo, alvo = m.group(1), m.group(2)
+        if re.search(r"\b(arquivos?|pdfs?|planilhas?|pastas?|desenhos?|documentos?|montagens?|pecas?|projetos?|dxfs?|dwgs?|"
+                     r"todos|todas|eles|elas|esses|essas|isso|este|esta|esse|essa|lista|resultado|primeiro|segundo|terceiro|"
+                     r"ultimo|\d+)\b", alvo):
+            return None                                         # é arquivo, não programa
         prog = programas.resolver(alvo, aceitar_qualquer=bool(re.search(r"\b(programa|aplicativo)\b", alvo)))
         if not prog:
             return None

@@ -165,7 +165,6 @@ class Voz:
 
     def parar(self):
         """Interrompe a fala na hora (Esc ou clique no núcleo)."""
-        import sounddevice as sd
         self._parar = True
         while not self.q.empty():
             try:
@@ -174,10 +173,19 @@ class Voz:
                     cb(1, 1)
             except Exception:
                 break
-        try:
-            sd.stop()
-        except Exception:
-            pass
+        # não chama sd.stop() aqui: parar o som de outra linha de execução derrubava o programa no Windows.
+        # Quem toca (_tocar) confere esta marca a cada 0,1 s e fecha o próprio som.
+
+    def _tocar(self, audio, taxa):
+        """Toca em pedaços de 0,1 s na própria linha da voz; para na hora quando pedem para parar."""
+        import sounddevice as sd
+        audio = np.ascontiguousarray(self._vol(audio), dtype=np.float32).reshape(-1, 1)
+        bloco = max(256, int(taxa * 0.1))
+        with sd.OutputStream(samplerate=taxa, channels=1, dtype="float32", latency="high") as st:
+            for i in range(0, len(audio), bloco):
+                if self._parar:
+                    return
+                st.write(audio[i:i + bloco])
 
     def _loop(self):
         while True:
@@ -272,7 +280,6 @@ class Voz:
     def _falar_xtts(self, texto, voz_id):
         """Gera frase por frase: enquanto uma toca, a próxima já está sendo gerada (sem engasgos)."""
         import torch
-        import sounddevice as sd
         lat, emb = self._lat(voz_id)
         frases = dividir_frases(texto)
         fila = queue.Queue(maxsize=4)
@@ -304,13 +311,12 @@ class Voz:
                 break
             k += 1
             self._ao_frase(k, len(frases))
-            sd.play(self._vol(np.concatenate([a, pausa])), 24000, blocking=True, latency="high")
+            self._tocar(np.concatenate([a, pausa]), 24000)
             tocou = True
         if erro and not tocou:
             raise erro[0]
 
     def _falar_piper(self, texto):
-        import sounddevice as sd
         if not (paths.PIPER_EXE.exists() and paths.PIPER_VOZ.exists()):
             log.error("voz rápida ausente")
             return
@@ -323,7 +329,7 @@ class Voz:
         if audio.size and not self._parar:
             self._ao_frase(1, 1)
             self.tipo_atual = "RÁPIDA"
-            sd.play(self._vol(audio), taxa, blocking=True, latency="high")
+            self._tocar(audio, taxa)
 
 
 def preparar_audio_voz(origem, destino, max_seg=30):
