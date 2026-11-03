@@ -823,6 +823,30 @@ def _():
     assert len(impressos) == 4 and r11.startswith("Mandei imprimir 4"), (r11, impressos)
     r12 = it.tratar("imprime o pdf da espreguiçadeira alemanha na impressora pcp", [])
     assert impressos[-1] == ("ESPREGUIÇADEIRA ALEMANHA.PDF", "IMPRESSORA PCP"), (r12, impressos[-1])
+    # caso real (03/11): busca mostrou PDF, montagem, desenho, pastas e parecidos; "abrir todos os pdf" tem de abrir só os PDFs da AURA
+    (d2 / "ESPREGUIÇADEIRA AURA 1,70X0,63X0,36H.SLDASM").write_bytes(b"x")
+    (d2 / "ESPREGUIÇADEIRA AURA 1,70X0,63X0,36H.SLDDRW").write_bytes(b"x")
+    (Z / "ENGENHARIA/PROJETOS/ESPREGUIÇADEIRA AURA/ESPREGUIÇADEIRA AURA").mkdir(parents=True, exist_ok=True)
+    (Z / "ENGENHARIA/PROJETOS/ESPREGUIÇADEIRA AQUIRAZ").mkdir(parents=True, exist_ok=True)
+    (Z / "ENGENHARIA/PROJETOS/ESPREGUIÇADEIRA AQUIRAZ/ESPREGUIÇADEIRA AQUIRAZ.pdf").write_bytes(b"x")
+    (Z / "ENGENHARIA/PROJETOS/ESPREGUIÇADEIRA AQUIRAZ/ESPREGUIÇADEIRA MAYA.pdf").write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    rb = it.tratar("procura espreguiçadeira aura file projetos", [])
+    assert "file projetos" not in rb.lower().split("achei")[0] or "Achei" in rb, rb
+    antes = len(abertos)
+    r13 = it.tratar("abrir todos os pdf", [])
+    novos = [os.path.basename(x) for x in abertos[antes:]]
+    assert len(novos) == 4 and all(x.lower().endswith(".pdf") and "AURA" in x for x in novos), (rb, r13, novos)
+    antes = len(abertos)
+    r14 = it.tratar("abrir todos os pdf espreguiçade3ira aura file projetos", [])
+    novos = [os.path.basename(x) for x in abertos[antes:]]
+    assert len(novos) == 4 and all(x.lower().endswith(".pdf") and "AURA" in x for x in novos), (r14, novos)
+    it.tratar("procura espreguiçadeira aura no file projetos", [])
+    antes = len(abertos)
+    r15 = it.tratar("abre todos", [])
+    novos = [os.path.basename(x) for x in abertos[antes:]]
+    assert novos and all("AURA" in x for x in novos) and not any(x == "ESPREGUIÇADEIRA AURA" for x in novos), (r15, novos)
+    print(f"::notice title=Aura::{rb} %0A{r13} %0A{r14} %0A{r15}", flush=True)
     print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)
 
 

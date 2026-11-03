@@ -102,6 +102,7 @@ class Intencoes:
 
     def _tratar(self, pergunta, historico):
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
+        p = re.sub(r"(?<=[a-z])\d(?=[a-z])", "", p)              # "espreguicade3ira": tecla a mais no meio da palavra
         for f in (self.confirmar_energia, self.parar, self.imprimir_pedido, self.computador, self.peca_solidworks, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
                   self.programa, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
                   self.conteudo_pasta, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
@@ -393,7 +394,8 @@ class Intencoes:
             for exige in (True, False):
                 for w in palavras:
                     pref = r"(?:file|fail|faile|fala|servidor)\s*[-_ ]?\s*" if exige else r"(?<!pasta )"
-                    m = re.search(r"\b(no|na|em|do|da|dentro do|dentro da)\s+" + pref + re.escape(w) + r"\b", p)
+                    prep = r"\b(?:(?:no|na|em|do|da|dentro do|dentro da)\s+)?" if exige else r"\b(?:no|na|em|do|da|dentro do|dentro da)\s+"
+                    m = re.search(prep + pref + re.escape(w) + r"\b", p)
                     if m and not (not exige and re.search(r"\bpasta\s*$", p[:m.start()])):
                         return raiz, f" no {apel.replace('_', ' ').replace('-', ' ')}", p[:m.start()] + " " + p[m.end():]
         m = re.search(r"\b(no|na|em) (unidade |disco |drive )?([a-z])\b(?! de)", p)
@@ -480,6 +482,7 @@ class Intencoes:
             if len(exatos) == 1:
                 self.ultimo_caminho = exatos[0]["caminho"]
             self.resultados = exatos + parecidos[:3]
+            self._n_exatos = (id(self.resultados), len(exatos))
             r0 = exatos[0]
             frase = f"Achei: {descrever(r0)}."
             if len(exatos) > 1:
@@ -490,6 +493,7 @@ class Intencoes:
             return frase
         if parecidos:
             self.resultados = parecidos
+            self._n_exatos = None
             nomes = "; ".join(r["nome"] for r in parecidos[:4])
             self.n.detalhe_texto = "\n".join(f"{i + 1}. {r['caminho']}" for i, r in enumerate(parecidos[:8]))
             return (f"Não achei exatamente \"{consulta}\"{lugar}, mas encontrei parecidos: {nomes}. "
@@ -537,15 +541,38 @@ class Intencoes:
                     escolhidos = nums
                 elif len(nums) == 1:
                     self._idx_unico = nums[0]
+        exts_pedidas, _ = self._tipo(p)
         if escolhidos is not None:
-            lista = []
-            for i_ in escolhidos:
-                try:
-                    lista.append(self.resultados[i_])
-                except IndexError:
-                    pass
+            todos_pedido = bool(re.search(r"\b(todos|todas|tudo|eles|elas|esses|essas|estes|estas)\b", p) or RX_TODOS.search(p))
+            b = getattr(self, "ultima_busca", None)
+            if todos_pedido and exts_pedidas and b:
+                # "abre todos os PDFs" depois de uma busca: procura de novo só esse tipo, com o mesmo nome e lugar
+                ex, _par = self.n.indice.buscar(b["consulta"], b["onde"], limite=60, exts=exts_pedidas)
+                ex = [r for r in ex if not r["eh_pasta"]]
+                if not ex:
+                    self.resultados = []
+                    return (f"Não achei nenhum {NOME_TIPO.get(exts_pedidas[0], 'arquivo')} de \"{b['consulta']}\""
+                            f"{b['lugar']}, {self._trat()}. Não abri nada.")
+                escolhidos = None
+                lista = ex
+            else:
+                n_ex = getattr(self, "_n_exatos", None)
+                n_ex = n_ex[1] if n_ex and n_ex[0] == id(self.resultados) else None
+                if todos_pedido and n_ex:
+                    escolhidos = [i_ for i_ in escolhidos if i_ < n_ex]       # só os de nome igual, não os parecidos
+                lista = []
+                for i_ in escolhidos:
+                    try:
+                        lista.append(self.resultados[i_])
+                    except IndexError:
+                        pass
+                if todos_pedido and "pasta" not in p:
+                    lista = [r for r in lista if not r.get("eh_pasta")]
+                if exts_pedidas:
+                    lista = [r for r in lista if os.path.splitext(r["caminho"])[1].lower() in exts_pedidas]
             if not lista:
                 return f"Só achei {len(self.resultados)} resultados, {self._trat()}."
+            total = len(lista)
             lista = lista[:15]
             for r in lista:
                 if "pasta" in p:
@@ -555,7 +582,7 @@ class Intencoes:
                 time.sleep(0.3)
             self.ultimo_caminho = lista[-1]["caminho"]
             self.resultados = []
-            extra = " (abri os 15 primeiros)" if len(escolhidos) > 15 else ""
+            extra = " (abri os 15 primeiros)" if total > 15 else ""
             return f"Abrindo {len(lista)} arquivos{extra}: " + "; ".join(r["nome"] for r in lista) + "."
         idx = getattr(self, "_idx_unico", None)
         self._idx_unico = None
