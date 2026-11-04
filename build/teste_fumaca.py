@@ -556,6 +556,10 @@ def _():
             assert "Para quando" in r, r
     r = c.processar("o que tenho pra amanhã?")
     assert "Reunião com a equipe" in r and "Dentista" in r, r
+    from mantiqueira import textutil
+    t1 = textutil.texto_do_lembrete("ME LEMBRAR 13:15 DE FAZER BASE MESA SELECTA 2,20X1,10")
+    assert t1 == "FAZER BASE MESA SELECTA 2,20X1,10", t1
+    assert textutil.minuscula_inicial("FAZER BASE") == "FAZER BASE" and textutil.minuscula_inicial("Fazer a base") == "fazer a base"
     print("::notice title=Agenda::" + " %0A".join(x.replace("%", "%25") for x in relato)[:1500], flush=True)
 
 
@@ -731,6 +735,33 @@ def _():
     assert feitos[-1][0][0][0] == "960", (rn, feitos[-1])
     r["imprime todos sem foto na impressora pcp"] = ri
     r["gera pdf do 1 e do 3"] = rp
+    # caso real (04/11): ele avisa que entrou um CNP novo; "imprima" tem de imprimir esse
+    import json as _json
+    s_ = next(x for x in sw.lista() if "cnp" in (x["url"] + x["nome"]).lower())
+    n.db.kv_set(f"cnp_vistos:{s_['nome']}", _json.dumps([l[0] for l in L]))
+    add(973, "MESA DE CENTRO JUNCO", H, H)
+    L.insert(0, L.pop())
+    falas = []
+    n.falar_aviso = falas.append
+    n.intencoes = it
+    sw._conferir(s_)
+    assert falas and "MESA DE CENTRO JUNCO" in falas[0], falas
+    ra = it.tratar("IMPRIMA", [])
+    assert feitos[-1][0][0][0] == "973" and ra.startswith("Mandei imprimir 1 CNP"), (ra, feitos[-1])
+    it.ultimo_cnp = None
+    rq = it.tratar("IMPRIMA", [])
+    assert rq.startswith("O que eu imprimo"), rq
+    rb = it.tratar("ESSA QUE ENTROU NO SISTEMA POR ULTIMO", [])
+    assert feitos[-1][0][0][0] == "973" and rb.startswith("Mandei imprimir"), (rb, feitos[-1])
+    it.tratar("quantas cnps foram aprovadas pela gerência hoje?", [])
+    rc = it.tratar("IMPRIMA A ULTIMA CNP CRIADA NO SISTEMA DE CNP", [])
+    assert feitos[-1][0][0][0] == "973", (rc, feitos[-1])
+    # "imprima" logo depois de abrir um arquivo: imprime o arquivo
+    it._usar("C:/x/ESPREGUIÇADEIRA LOS ANGELES TELA.pdf")
+    antes = len(impressos)
+    rf = it.tratar("IMPRIMA", [])
+    assert impressos[antes:] == [("C:/x/ESPREGUIÇADEIRA LOS ANGELES TELA.pdf", None)], (rf, impressos[antes:])
+    r["aviso → IMPRIMA"], r["IMPRIMA → essa que entrou"], r["a última criada"], r["arquivo aberto → IMPRIMA"] = ra, rb, rc, rf
     print("::notice title=CNP períodos::" + " %0A".join(f"{q} → {a[:120]}" for q, a in r.items()), flush=True)
 
 

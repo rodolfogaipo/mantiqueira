@@ -109,6 +109,11 @@ IMPRIMIR / PDF DE CNP
   Documentos\Mantiqueira\CNPs. Ele só usa a página "Imprimir" do sistema;
   não altera nada.
 - Depois de achar arquivos: "imprime todos" / "imprime o 2".
+- Depois do aviso "entrou um CNP novo", é só dizer "imprime" (ou "gera o PDF").
+  "imprime a última CNP criada" / "a que entrou por último" = a de número maior.
+- "imprime" logo depois de abrir um arquivo imprime esse arquivo.
+- Se ele perguntar "o que eu imprimo?", pode responder só "a que entrou por
+  último", "a 982" ou "o PDF da mesa luna".
 - "abra os arquivos" / "abre eles" depois de uma lista abre TODOS da lista;
   "abra os arquivos em PDF da espreguiçadeira aura" abre todos de uma vez.
 - LISTA DE PROJETOS de uma vez (separados por vírgula, "e" ou um por linha):

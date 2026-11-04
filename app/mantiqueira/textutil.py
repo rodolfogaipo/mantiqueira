@@ -320,16 +320,23 @@ def repeticao(t: str) -> str:
     return ""
 
 
+def minuscula_inicial(t: str) -> str:
+    """'Fazer a base' → 'fazer a base'; texto todo em maiúsculas fica como está ('FAZER BASE')."""
+    if len(t) > 1 and t[1:2].isupper():
+        return t
+    return t[:1].lower() + t[1:]
+
+
 def texto_do_lembrete(t: str) -> str:
     """Tira 'me lembra de', horários etc. e deixa só a tarefa."""
     x = (t or "").strip()
     x = re.sub(r"^(mantiqueira[,!]?\s*)", "", x, flags=re.I)
     x = re.sub(r"^(eu )?(preciso|quero|gostaria|queria|pode|poderia)( que)?( (voc[eê]|vc))?\s+", "", x, flags=re.I)
     x = re.sub(r"^(toda|todo|todos os|todas as)\s+(semana|dia|dias|manh[ãa]|tarde|noite)?\b\s*", "", x, flags=re.I)
-    x = re.sub(r"^(me )?(lembre|lembra|avise|avisa)( me)?\s+(de|que|para|pra)\b\s*", "", x, flags=re.I)
+    x = re.sub(r"^(me )?(lembrar|lembre|lembra|avisar|avise|avisa)( me)?\s+(de|que|para|pra)\b\s*", "", x, flags=re.I)
     x = re.sub(r"^n[aã]o (me )?deix\w* (eu )?(me )?esquecer\s*(de|que|do|da)?\b\s*", "", x, flags=re.I)
     x = re.sub(r"^(cria|crie|coloca|coloque|faz|faça|faca)?\s*(um |uma )?(lembrete|compromisso)\b\s*((de|da|do|para|pra)\b|:)?\s*", "", x, flags=re.I)
-    x = re.sub(r"^(por favor[, ]*)?(me )?(lembr[ae]|avis[ae])( me)?(( de| que| para| pra)\b)?\s*", "", x, flags=re.I)
+    x = re.sub(r"^(por favor[, ]*)?(me )?(lembrar|lembr[ae]|avisar|avis[ae])\b( me)?(( de| que| para| pra)\b)?\s*", "", x, flags=re.I)
     x = re.sub(r"^(por favor[, ]*)?(coloca|coloque|poe|põe|ponha|adiciona|adicione|anota|anote|marca|marque|agenda|agende|"
                r"cria|crie|inclui|inclua|bota|lança|lanca|registra|registre)( pra mim| para mim)?( um| uma)?"
                r"( lembrete| compromisso| na (minha )?agenda| no (meu )?calend[aá]rio)?( pra mim| para mim)?"

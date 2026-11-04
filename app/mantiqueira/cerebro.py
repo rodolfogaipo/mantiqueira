@@ -221,7 +221,7 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
                 resp = self._criar_lembrete(texto, quando, pergunta)
             else:
                 self.lembrete_pendente = {"texto": texto, "pergunta": pergunta, "t": time.time()}
-                resp = f"Claro, {trat}. Para quando devo marcar \"{texto[:1].lower() + texto[1:]}\"? Diga o dia e a hora."
+                resp = f"Claro, {trat}. Para quando devo marcar \"{textutil.minuscula_inicial(texto)}\"? Diga o dia e a hora."
             log.info("agenda: %s", resp)
             self._guardar(pergunta, resp)
             return resp
@@ -276,10 +276,12 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
         elif re.search(r"\b(abrindo|abri|abrirei|fechando|fechei|iniciando|iniciei)\b.{0,40}\b(solidworks|excel|word|autocad|"
                        r"sketchup|chrome|edge|navegador|calculadora|programa|aplicativo|aspire|cypcut|gaipo|outlook|teams)\b|"
                        r"\b(fiz|criei|desenhei|modelei|criando|desenhando|modelando|fazendo)\b.{0,30}\b(cubo|chapa|cilindro|tubo|"
-                       r"peca|bloco|esboco|extrusao)\b|\b(digitei|digitando|apertei|pressionei|desliguei|reiniciei|bloqueei)\b", r_sa):
+                       r"peca|bloco|esboco|extrusao)\b|\b(digitei|digitando|apertei|pressionei|desliguei|reiniciei|bloqueei|imprimindo|"
+                       r"imprimi|mandei imprimir|impressao (sera|foi)|vou imprimir|aguarde enquanto)\b", r_sa):
             # a IA "fingiu" mexer no computador: não fez nada, então não pode dizer que fez
             log.info("IA fingiu uma ação no computador: %r", resposta)
-            resposta = (f"Não fiz isso, {trat}, porque não entendi o pedido como um comando. Peça assim: \"abre o "
+            resposta = (f"Não fiz isso, {trat}, porque não entendi o pedido como um comando. Peça assim: \"imprime o CNP 980\", "
+                        f"\"imprime o PDF da mesa luna\", \"abre o "
                         f"SolidWorks\", \"fecha o Excel\", \"digita ...\", \"aperta control s\" ou \"faz um cubo de 100 no "
                         f"SolidWorks\".")
         elif acao == "nenhuma" and re.search(r"\b(vou (verificar|procurar|abrir|checar|olhar|buscar)|um momento|aguarde)\b", r_sa):
@@ -380,7 +382,7 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
             dia = f"{textutil.DIAS_SEMANA[quando.weekday()]}, dia {quando.day}"
         rep = {"diario": ", todos os dias", "semanal": ", toda semana", "dias_uteis": ", nos dias úteis"}.get(repetir, "")
         hora = f"{quando.hour}h" if quando.minute == 0 else f"{quando.hour}:{quando:%M}"
-        return f"Combinado, {self.n.cfg['tratamento']}. Aviso {dia} às {hora}{rep}: {texto[:1].lower() + texto[1:]}."
+        return f"Combinado, {self.n.cfg['tratamento']}. Aviso {dia} às {hora}{rep}: {textutil.minuscula_inicial(texto)}."
 
     def _executar(self, acao, r, pergunta, resposta):
         n, db, trat = self.n, self.n.db, self.n.cfg["tratamento"]

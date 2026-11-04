@@ -1025,6 +1025,7 @@ class Intencoes:
             time.sleep(1.5)
         else:
             os.startfile(caminho)
+            self._aberto = {"caminho": caminho, "t": time.time()}   # "imprime" logo depois imprime este
 
     # ------------------------------------------------------------------ imprimir / gerar PDF (CNPs e arquivos achados)
     @staticmethod
@@ -1066,8 +1067,14 @@ class Intencoes:
                       + "; ".join(lista) + ".") if lista else f"Não consegui ver as impressoras deste computador, {self._trat()}."
 
     def imprimir_pedido(self, p, original):
+        pend = getattr(self, "_imprimir_pend", None)
+        self._imprimir_pend = None
         if not RX_IMPRIMIR.search(p):
-            return None
+            if not pend or time.time() - pend["t"] > 120 or RX_ABRIR.search(p):
+                return None
+            # resposta ao "Qual CNP eu imprimo?": "essa que entrou por último", "a da mesa junco", "a 982"
+            de_cnp = pend.get("cnp") or re.search(r"\b(cnps?|sistema|entrou|entraram|criad\w*|cadastrad\w*|\d{3,5})\b", p)
+            p = ("imprime " if pend["imprimir"] else "gera o pdf do ") + ("cnp " if de_cnp else "") + p
         if RX_ABRIR.search(p) and not re.search(r"imprim|\bgera|\bgere|\bsalva|\bexporta|\bcria", p):
             return None                                 # "abre o plano de corte em pdf" é abrir arquivo
         imprimir = bool(re.search(r"\bimprim\w*|\bimpressao\b", p))
@@ -1103,6 +1110,17 @@ class Intencoes:
             self.resultados = []
             return (f"Mandei imprimir {len(arqs)} arquivo{'s' if len(arqs) > 1 else ''}"
                     f"{' na ' + impressora if impressora else ' na impressora padrão'}: " + "; ".join(r["nome"] for r in arqs) + ".")
+        # 1a) "imprime" / "imprime ele" logo depois de abrir um arquivo: imprime esse arquivo
+        ab = getattr(self, "_aberto", None)
+        if imprimir and not fala_cnp and not sobra and ab and time.time() - ab["t"] < 900 and \
+                not (recente_cnp and u["t"] > ab["t"]) and not re.search(r"\b(todos|todas|\d{1,2})\b", p):
+            impressora, erro = self._impressora(p, sw)
+            if erro:
+                return erro
+            from .sistemas_web import SistemasWeb
+            (sw or SistemasWeb).imprimir(ab["caminho"], impressora)
+            return (f"Mandei imprimir {os.path.basename(ab['caminho'])}"
+                    f"{', na ' + impressora if impressora else ', na impressora padrão'}.")
         # 1b) arquivo pelo nome, no computador, pendrive, File Projetos ou File Aluminas: "imprime o pdf da mesa luna"
         if imprimir and not fala_cnp and sobra and not (recente_cnp and not sobra):
             impressora, erro = self._impressora(p, sw)
@@ -1129,6 +1147,10 @@ class Intencoes:
             return r
         # 2) CNPs do sistema
         if not sw or not (fala_cnp or recente_cnp):
+            if imprimir and not sobra:
+                self._imprimir_pend = {"t": time.time(), "imprimir": True, "cnp": False}
+                return (f"O que eu imprimo, {self._trat()}? Diga o número do CNP, o nome do produto, ou o arquivo, por exemplo: "
+                        f"o PDF da mesa luna.")
             return None
         s = sw.qual(p) or (u["s"] if u else None) or next((x for x in sw.lista() if "cnp" in (x["url"] + x["nome"]).lower()), None)
         if not s:
@@ -1148,6 +1170,17 @@ class Intencoes:
                 l = ids_sistema[n_]
                 prod = re.split(r"\s+similar:", l[m["produto"]], flags=re.I)[0].strip() if m.get("produto") is not None else ""
                 itens.append((n_, f"CNP {n_}, {prod}"))
+        if not itens and re.search(r"\bultim[oa]s?\b.*\b(cri\w*|cadastr\w*|entrou|entraram|nov[oa]s?|lancad\w*)\b|"
+                                   r"\b(que (acabou de )?entrou|mais nov[oa]|mais recente)\b", p):
+            # "a última CNP criada" / "essa que entrou por último": o maior número de CNP do sistema (a mais nova)
+            nums = [k for k in ids_sistema if k.isdigit()]
+            if nums:
+                n_ = max(nums, key=int)
+                l = ids_sistema[n_]
+                prod = re.split(r"\s+similar:", l[m["produto"]], flags=re.I)[0].strip() if m.get("produto") is not None else ""
+                itens = [(n_, f"CNP {n_}, {prod}")]
+        if not itens and recente_cnp and len(lista_cnp) == 1 and not re.search(r"\b\d{3,5}\b", p):
+            itens = list(lista_cnp)                     # acabou de falar de um CNP só (ou do que entrou): "imprime" / "imprime ela"
         if not itens:
             sel = self._selecao(re.sub(r"\b\d{3,5}\b", " ", p), len(lista_cnp)) if recente_cnp else None
             if sel is not None:
@@ -1170,6 +1203,7 @@ class Intencoes:
                                 f"Diga o número, ou \"todos\".")
                     itens = lista_cnp
         if not itens:
+            self._imprimir_pend = {"t": time.time(), "imprimir": imprimir, "cnp": True}
             return (f"Qual CNP eu {'imprimo' if imprimir else 'passo para PDF'}, {self._trat()}? Diga o número do CNP, "
                     f"o nome do produto, ou peça depois de uma lista: \"imprime todos\".")
         itens = itens[:30]

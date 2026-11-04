@@ -636,6 +636,14 @@ class SistemasWeb:
             vistos = set(json.loads(antigos))
             novos = [l for l in linhas if chave(l) not in vistos]
             if 0 < len(novos) <= 15:
+                # o que acabou de entrar vira "a lista": depois do aviso, "imprime" / "imprime ela" / "gera o PDF" já sabem qual é
+                def so_prod(l):
+                    prod = l[i_prod] if i_prod is not None and i_prod < len(l) else ""
+                    return re.split(r"\s+similar:", prod, flags=re.I)[0].strip()
+                self.ultima_lista = [(chave(l), f"CNP {chave(l)}, {so_prod(l)}") for l in novos]
+                it = getattr(self.n, "intencoes", None)
+                if it is not None:
+                    it.ultimo_cnp = {"s": s, "t": time.time(), "campo_txt": "", "produto_txt": ""}
                 if len(novos) == 1:
                     self.n.falar_aviso(f"{trat[:1].upper() + trat[1:]}, entrou um CNP novo no sistema: {nome(novos[0])}.")
                 else:
