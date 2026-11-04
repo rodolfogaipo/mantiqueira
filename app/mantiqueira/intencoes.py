@@ -57,8 +57,10 @@ def principal(consulta, lista, exts=None):
     if iguais:
         if not exts and len({os.path.splitext(r["nome"])[1].lower() for r in iguais}) > 1:
             return None                                 # PDF e montagem com o mesmo nome: pergunta o tipo
+        if len(iguais) == 1:
+            return iguais[0]
         imp = [r for r in iguais if impresso(r)]
-        return (imp or iguais)[0]
+        return imp[0] if len(imp) == 1 else None      # mesmo nome em lugares diferentes: pergunta qual
     imp = [r for r in arqs if impresso(r) and not RX_SECUNDARIO.search(_chave(r["nome"]))]
     if exts and len(imp) == 1:
         return imp[0]

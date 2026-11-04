@@ -856,7 +856,7 @@ def _():
     rl1 = it.tratar("abre o pdf da mesa luna oval, espreguiçadeira alemanha, banco lins e mesa xpto no file projetos", [])
     novos = [os.path.basename(x) for x in abertos[antes:]]
     assert all(x.lower().endswith(".pdf") for x in novos) and "BANCO LINS.pdf" in novos and \
-        "ESPREGUIÇADEIRA ALEMANHA.PDF" in novos and "MESA LUNA OVAL.pdf" in novos and "Não achei: mesa xpto" in rl1 and \
+        "ESPREGUIÇADEIRA ALEMANHA.PDF" in novos and "mesa luna oval (2 arquivos)" in rl1 and "Não achei: mesa xpto" in rl1 and \
         "PLANO DE CORTE ESPREGUIÇADEIRA ALEMANHA.PDF" not in novos, (rl1, novos)
     antes = len(abertos)
     rl2 = it.tratar("abre banco lins e espreguiçadeira alemanha", [])
