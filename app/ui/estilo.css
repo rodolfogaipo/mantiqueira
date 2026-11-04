@@ -94,7 +94,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--tx);f
 
 .eq{display:flex;align-items:center;justify-content:center;gap:3px;height:28px}
 .eq div{width:4px;transform-origin:center;transform:scaleY(.25);transition:transform .12s}
-.conversa{margin-top:8px;text-align:center;min-height:62px}
+/* a caixa de digitação fica SEMPRE no mesmo lugar (embaixo); a conversa cresce para cima, por cima do anel */
+.falaBox{display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none}
+.falaBox>*{pointer-events:auto;flex:none}
+.conversa{margin-top:8px;text-align:center;min-height:62px;max-height:160px;overflow:hidden;padding:6px 10px 2px;
+  background:radial-gradient(ellipse 60% 75% at 50% 60%,rgba(3,10,28,.88) 0%,rgba(3,10,28,.6) 55%,transparent 100%)}
 .uline{font-size:13px;color:var(--mu);letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .aline{font-size:18px;font-weight:500;color:var(--hi);margin-top:6px;line-height:1.35;max-height:100px;overflow-y:auto}
 .cmd{margin-top:12px;display:flex;align-items:center;gap:10px;padding:0 6px 0 16px;height:50px;border:1px solid var(--p2);
