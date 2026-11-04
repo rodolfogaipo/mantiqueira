@@ -264,7 +264,7 @@ Usuário: tenho uma reunião amanhã → {{"resposta":"Quer que eu lembre, {t}? 
             acao = "nenhuma"
         r_sa = textutil.sem_acento(resposta.lower())
         if re.search(r"\b(procur\w*|localiz\w*|encontr\w*|achei|achado|abrindo|abri|buscando)\b", r_sa) and \
-                re.search(r"\b(arquivo|pdf|pasta|diretorio|planilha|montagem|desenho|dxf|dwg|computador|rede)\b|[a-z]:\\", r_sa) and \
+                re.search(r"\b(arquivo|pdf|pasta|diretorio|planilha|montagem|desenho|dxf|dwg|computador|rede|file|projetos|aluminas|pendrive)\b|[a-z]:\\", r_sa) and \
                 getattr(n, "intencoes", None):
             # a IA "fingiu" procurar um arquivo: faz a busca de verdade e responde com o resultado
             real = n.intencoes.buscar_forcado(pergunta)

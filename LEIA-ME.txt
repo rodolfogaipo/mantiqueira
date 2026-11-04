@@ -117,6 +117,11 @@ IMPRIMIR / PDF DE CNP
   Sem dizer o tipo, ele abre os que têm um arquivo só e pergunta dos outros;
   aí é só responder "os PDFs" ou "as montagens". No fim ele diz o que não achou.
   Máximo de 15 arquivos por pedido.
+- "o PDF" (no singular) abre o PDF PRINCIPAL de cada produto: o de nome igual
+  (com ou sem as medidas), de preferência na pasta IMPRESSOS — não abre plano
+  de corte, PCT, RNC ou custo. Para abrir tudo: "todos os PDFs da …".
+- "tem alguma mesa de centro junco no File Projetos?" procura de verdade;
+  depois "abra o PDF" abre o PDF dela (nunca outro tipo de arquivo).
 
 PROGRAMAS E COMANDOS DO COMPUTADOR
 - "abre o SolidWorks", "abre o Excel", "abre o Gaipo Nest", "abre a calculadora",

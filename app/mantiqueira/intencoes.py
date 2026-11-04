@@ -24,7 +24,45 @@ RX_TIPO_SOLTO = re.compile(r"\b(pdfs?|planilhas?|montagem|montagens|dxf|dwg|arqu
 RX_PRONOME = re.compile(r"\b(ele|ela|esse|essa|este|esta|isso|aquilo|o arquivo|a pasta dele|la|entao|agora|ai|logo|mesmo)\b")
 RX_LIXO = re.compile(r"\b(mantiqueira|procur\w*|pesquis\w*|localiz\w*|encontr\w*|ach[ae]r?|pra mim|para mim|por favor|onde|esta|estao|"
                      r"fica|ficam|ta|tao|guardei|salvei|cade|no computador|no pc|na rede|no pendrive|em tudo|arquivo|arquivos|"
-                     r"pasta|o|a|os|as|um|uma|de|do|da|dos|das|me|meu|minha|que|eu|e|ai|aqui)\b")
+                     r"pasta|o|a|os|as|um|uma|de|do|da|dos|das|me|meu|minha|que|eu|e|ai|aqui|tem|existe|existem|ha|"
+                     r"algum|alguma|alguns|algumas|nenhum|nenhuma)\b")
+
+
+def _chave(nome):
+    """'MESA DE CENTRO JUNCO.pdf' → 'mesa centro junco' (sem extensão, acento e palavras soltas)."""
+    t = textutil.sem_acento(os.path.splitext(nome)[0].lower())
+    t = re.sub(r"[^a-z0-9, ]+", " ", t)
+    return re.sub(r"\s+", " ", RX_LIXO.sub(" ", t)).strip()
+
+
+def _sem_medida(k):
+    """'poltrona malibu 0,80 x 0,80 x 0,72h' → 'poltrona malibu'."""
+    return re.sub(r"\s+\d[\d ,.xh]*$", "", k).strip()
+
+
+RX_SECUNDARIO = re.compile(r"\b(plano de corte|plano corte|plano de viracao|pct|rnc|custo|custos|relatorio|orcamento|folha model)\b")
+
+
+def principal(consulta, lista, exts=None):
+    """O arquivo principal do produto: nome igual (com ou sem as medidas), de preferência na pasta IMPRESSOS.
+    None quando não dá para ter certeza (aí ele pergunta)."""
+    c = _chave(consulta)
+    arqs = [r for r in lista if not r.get("eh_pasta")]
+    if not c or not arqs:
+        return None
+
+    def impresso(r):
+        return bool(re.search(r"impress", textutil.sem_acento((r.get("pasta") or r["caminho"]).lower())))
+    iguais = [r for r in arqs if _chave(r["nome"]) == c or _sem_medida(_chave(r["nome"])) == c]
+    if iguais:
+        if not exts and len({os.path.splitext(r["nome"])[1].lower() for r in iguais}) > 1:
+            return None                                 # PDF e montagem com o mesmo nome: pergunta o tipo
+        imp = [r for r in iguais if impresso(r)]
+        return (imp or iguais)[0]
+    imp = [r for r in arqs if impresso(r) and not RX_SECUNDARIO.search(_chave(r["nome"]))]
+    if exts and len(imp) == 1:
+        return imp[0]
+    return None
 ORDINAIS = {"primeiro": 0, "primeira": 0, "1": 0, "segundo": 1, "segunda": 1, "2": 1, "terceiro": 2, "terceira": 2, "3": 2,
             "quarto": 3, "quarta": 3, "4": 3, "quinto": 4, "quinta": 4, "5": 4, "ultimo": -1, "ultima": -1}
 # palavras que só servem para parar/cancelar (a frase inteira tem que ser feita delas)
@@ -456,6 +494,11 @@ class Intencoes:
 
     def buscar(self, p, original, forcar=False):
         lugar_frase = RX_BUSCA_LUGAR.search(p) and RX_TIPO_SOLTO.search(p) and not RX_ABRIR.search(p)
+        if not lugar_frase and not RX_ABRIR.search(p) and \
+                (re.match(r"^(e\s+)?(entao\s+)?(tem|existe|existem|ha)\b", p) or
+                 (re.match(r"^e\s+", p) and getattr(self, "ultima_busca", None) and time.time() - self.quando_busca < 900)):
+            if self._onde(p)[0] != "tudo":
+                lugar_frase = True                              # "tem alguma mesa de centro junco no File Projetos?"
         if (not RX_BUSCA.search(p) and not lugar_frase and not forcar) or textutil.pede_lembrete(p):
             return None
         ix = self.n.indice
@@ -586,6 +629,23 @@ class Intencoes:
             return f"Abrindo {len(lista)} arquivos{extra}: " + "; ".join(r["nome"] for r in lista) + "."
         idx = getattr(self, "_idx_unico", None)
         self._idx_unico = None
+        if idx is None and exts_pedidas:
+            # "abre o PDF" depois de uma lista com vários tipos: o PDF certo, nunca o primeiro da lista
+            do_tipo = [r for r in self.resultados if os.path.splitext(r["caminho"])[1].lower() in exts_pedidas]
+            b = getattr(self, "ultima_busca", None)
+            if not do_tipo and b:
+                do_tipo, _par = self.n.indice.buscar(b["consulta"], b["onde"], limite=30, exts=exts_pedidas)
+            if not do_tipo:
+                return f"Não achei nenhum {NOME_TIPO.get(exts_pedidas[0], 'arquivo')} nessa lista, {self._trat()}. Não abri nada."
+            pr = principal(self.consulta or (b or {}).get("consulta", ""), do_tipo, exts_pedidas)
+            if not pr and len(do_tipo) > 1:
+                self.resultados = do_tipo
+                self.quando_busca = time.time()
+                self.n.detalhe_texto = "\n".join(f"{i + 1}. {r['caminho']}" for i, r in enumerate(do_tipo[:8]))
+                return (f"Tem {len(do_tipo)} {NOME_TIPO.get(exts_pedidas[0], 'arquivo')}s: "
+                        + "; ".join(f"{i + 1}, {descrever(r)}" for i, r in enumerate(do_tipo[:4])) + ". Qual deles eu abro?")
+            self.resultados = [pr or do_tipo[0]]
+            idx = 0
         if idx is None:
             idx = 0
         try:
@@ -681,10 +741,9 @@ class Intencoes:
             self.resultados = []
             return f"Abrindo {len(lista)} arquivos: " + "; ".join(r["nome"] for r in lista) + "."
         # nome do arquivo igual ao que ele disse (sem "PLANO DE CORTE…" e afins): é esse
-        iguais = [r for r in exatos if not r["eh_pasta"] and
-                  re.sub(r"\s+", " ", textutil.sem_acento(os.path.splitext(r["nome"])[0].lower())).strip() == consulta]
-        if len(iguais) == 1:
-            exatos = iguais
+        pr = principal(consulta, exatos, exts)
+        if pr:
+            exatos = [pr]
         if len(exatos) == 1:
             r = exatos[0]
             if ix:
@@ -1372,7 +1431,7 @@ class Intencoes:
                     break
                 x = y
             x = re.sub(r"\s+", " ", re.sub(r"\b(pra mim|para mim|por favor|mantiqueira|pdfs?)\b", " ", x)).strip()
-            if x:
+            if x and re.sub(r"\s+", "", RX_LIXO.sub(" ", x)):    # "estão no file projetos" sobra "estao": não é item
                 itens.append(x)
         return itens
 
@@ -1394,6 +1453,7 @@ class Intencoes:
             if len(itens) < 2 or any(len(x) < 3 for x in itens):
                 return None
         pastas = bool(re.search(r"\bpastas?\b", p))
+        todos = bool(re.search(r"\b(todos|todas)\b", p))      # "os PDFs desses" = o PDF de cada um; "todos" = todos
         abrir, varias, nao = [], [], []
         for item in itens[:20]:
             ex, par = ix.buscar(item, onde, limite=60, exts=exts)
@@ -1401,11 +1461,11 @@ class Intencoes:
             if not ex:
                 nao.append(item)
                 continue
-            iguais = [r for r in ex if re.sub(r"\s+", " ", textutil.sem_acento(os.path.splitext(r["nome"])[0].lower())).strip() == item]
-            if exts and not pastas:
-                abrir += iguais or ex                           # "os PDFs desses": o de nome igual; senão todos daquele tipo
-            elif len(iguais) == 1:
-                abrir.append(iguais[0])
+            pr = principal(item, ex, exts) if not pastas else None
+            if exts and not pastas and todos:
+                abrir += ex                                     # "todos os PDFs desses": todos daquele tipo
+            elif pr:
+                abrir.append(pr)                                # "o PDF desses": o principal de cada um
             elif len(ex) == 1:
                 abrir.append(ex[0])
             else:

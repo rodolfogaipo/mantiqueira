@@ -794,22 +794,22 @@ def _():
               "ENCOSTO ESPREGUIÇADEIRA AURA.pdf"]:
         (d2 / f).write_bytes(b"x")
     n.indice.varrer(raiz, "rede")
-    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    it.tratar("procura pdf espreguiçadeira aura no file projetos", [])
     antes = len(abertos)
     r9 = it.tratar("abra todos", [])
     assert len(abertos) - antes == 4, (r9, abertos[antes:])
-    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    it.tratar("procura pdf espreguiçadeira aura no file projetos", [])
     antes = len(abertos)
     r10 = it.tratar("abre o 2 e o 4", [])
     assert len(abertos) - antes == 2, (r10, abertos[antes:])
-    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    it.tratar("procura pdf espreguiçadeira aura no file projetos", [])
     antes = len(abertos)
     r10b = it.tratar("abra os arquivos", [])
     assert len(abertos) - antes == 4, (r10b, abertos[antes:])
     antes = len(abertos)
     r10c = it.tratar("abra os arquivos em pdf espreguiçadeira aura no file projetos", [])
     assert len(abertos) - antes == 4, (r10c, abertos[antes:])
-    it.tratar("Abra pdf espreguiçadeira aura esta no file projetos", [])
+    it.tratar("procura pdf espreguiçadeira aura no file projetos", [])
     antes = len(abertos)
     r10d = it.tratar("abre os dois primeiros", [])
     assert len(abertos) - antes == 2, (r10d, abertos[antes:])
@@ -853,7 +853,7 @@ def _():
         (d3 / f).write_bytes(b"x")
     n.indice.varrer(raiz, "rede")
     antes = len(abertos)
-    rl1 = it.tratar("abre os pdfs da mesa luna oval, espreguiçadeira alemanha, banco lins e mesa xpto no file projetos", [])
+    rl1 = it.tratar("abre o pdf da mesa luna oval, espreguiçadeira alemanha, banco lins e mesa xpto no file projetos", [])
     novos = [os.path.basename(x) for x in abertos[antes:]]
     assert all(x.lower().endswith(".pdf") for x in novos) and "BANCO LINS.pdf" in novos and \
         "ESPREGUIÇADEIRA ALEMANHA.PDF" in novos and "MESA LUNA OVAL.pdf" in novos and "Não achei: mesa xpto" in rl1 and \
@@ -871,6 +871,35 @@ def _():
     rl5 = it.tratar("imprime os pdfs do banco lins e da espreguiçadeira alemanha", [])
     assert [x[0] for x in impressos[antes_i:]] == ["BANCO LINS.pdf", "ESPREGUIÇADEIRA ALEMANHA.PDF"] and \
         rl5.startswith("Mandei imprimir"), (rl5, impressos[antes_i:])
+    # caso real (04/11): "tem alguma … no File Projetos?", "abra o pdf" depois da lista, e o PDF principal do produto
+    dj = Z / "ENGENHARIA/PROJETOS/Projetos Rodolfo/JUNCO/MESA DE CENTRO JUNCO"
+    (dj / "IMPRESSOS").mkdir(parents=True, exist_ok=True)
+    for f in ["IMPRESSOS/MESA DE CENTRO JUNCO.pdf", "IMPRESSOS/PLANO DE CORTE MESA DE CENTRO JUNCO.pdf",
+              "TAMPO MESA DE CENTRO JUNCO.SLDPRT", "MESA DE CENTRO JUNCO.skp"]:
+        (dj / f).write_bytes(b"x")
+    dm = Z / "ENGENHARIA/PROJETOS/Projetos Kauan/MALIBU/POLTRONA MALIBU/IMPRESSOS"
+    dm.mkdir(parents=True, exist_ok=True)
+    for f in ["POLTRONA MALIBU 0,80 X 0,80 X 0,72H.pdf", "PLANO DE CORTE POLTRONA MALIBU 0,80 X 0,80 X 0,72H.pdf"]:
+        (dm / f).write_bytes(b"x")
+    (Z / "ENGENHARIA/PCT").mkdir(parents=True, exist_ok=True)
+    (Z / "ENGENHARIA/PCT/PCT 673 - 3.44m - QK SISAL - AP 96.44% - 2 POLTRONA MALIBU.pdf").write_bytes(b"x")
+    n.indice.varrer(raiz, "rede")
+    rj1 = it.tratar("TEM ALGUMA MESA DE CENTRO JUNCO NO FILE PROJETOS?", [])
+    assert rj1 and rj1.startswith("Achei") and "tem alguma" not in rj1, rj1
+    antes = len(abertos)
+    rj2 = it.tratar("ABRA O PDF?", [])
+    assert [os.path.basename(x) for x in abertos[antes:]] == ["MESA DE CENTRO JUNCO.pdf"], (rj2, abertos[antes:])
+    antes = len(abertos)
+    rj3 = it.tratar("ABRA O PDF MESA DE CENTRO JUNCO FILE PROJETOS", [])
+    assert [os.path.basename(x) for x in abertos[antes:]] == ["MESA DE CENTRO JUNCO.pdf"], (rj3, abertos[antes:])
+    antes = len(abertos)
+    rj4 = it.tratar("abra o pdf poltrona malibu; mesa de centro junco; estão no file projetos", [])
+    assert sorted(os.path.basename(x) for x in abertos[antes:]) == ["MESA DE CENTRO JUNCO.pdf",
+                                                                     "POLTRONA MALIBU 0,80 X 0,80 X 0,72H.pdf"] and \
+        "Não achei" not in rj4, (rj4, abertos[antes:])
+    rj5 = it.tratar("e mesa de centro xyz no file projetos?", [])
+    assert rj5 and "Não" in rj5, rj5
+    print(f"::notice title=Junco::{rj1} %0A{rj2} %0A{rj3} %0A{rj4} %0A{rj5}", flush=True)
     print(f"::notice title=Lista::{rl1} %0A{rl2} %0A{rl3} %0A{rl4} %0A{rl5}", flush=True)
     print(f"::notice title=Aura::{rb} %0A{r13} %0A{r14} %0A{r15}", flush=True)
     print(f"::notice title=Pastas::{r1} %0A{r2} %0A{r3} %0A{r4} %0A{r5} %0A{r6} %0A{r7} %0A{r8} %0A{r9} %0A{r10} %0A{r11} %0A{r12}", flush=True)

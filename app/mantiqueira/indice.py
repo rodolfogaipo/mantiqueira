@@ -278,6 +278,8 @@ class Indice:
             filtro, args_f = " AND a.origem=?", [onde]
         elif re.fullmatch(r"[A-Za-z]:\\", onde or ""):
             filtro, args_f = " AND a.raiz=?", [onde.upper()]
+        elif onde and onde != "tudo":
+            filtro, args_f = " AND a.raiz=?", [onde]           # pasta-raiz dada pelo caminho (rede mapeada sem letra)
         if exts:
             filtro += " AND a.ext IN (" + ",".join("?" for _ in exts) + ")"
             args_f += list(exts)
