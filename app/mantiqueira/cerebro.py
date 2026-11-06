@@ -120,7 +120,7 @@ class Cerebro:
                 achados = []
             if achados:
                 partes.append("TRECHOS DA BASE DE CONHECIMENTO (guias de programas e documentos do usuário):\n" +
-                              "\n\n".join(f"[{a['nome']} — {a['titulo']}]\n{a['texto'][:850]}" for a in achados))
+                              "\n\n".join(f"[{a['nome']} — {a['titulo']}]\n{a['texto'][:a.get('max', 850)]}" for a in achados))
         mem = getattr(n, "memoria", None)
         if mem:
             try:

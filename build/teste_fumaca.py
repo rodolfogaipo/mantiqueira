@@ -146,6 +146,123 @@ def pdf_simples(caminho, linhas):
     Path(caminho).write_bytes(out)
 
 
+def pdf_paginas(caminho, paginas):
+    """PDF de várias páginas, com acentos (WinAnsi), para testar documentos de um dia por página."""
+    def esc(t):
+        return t.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", None,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"]
+    kids = []
+    for linhas in paginas:
+        conteudo = "BT /F1 10 Tf 40 760 Td 13 TL " + " ".join(f"({esc(l)}) Tj T*" for l in linhas) + " ET"
+        dados = conteudo.encode("cp1252")
+        objs.append(b"<< /Length %d >>\nstream\n" % len(dados) + dados + b"\nendstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {len(objs)} 0 R "
+                    f"/Resources << /Font << /F1 3 0 R >> >> >>")
+        kids.append(len(objs))
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] /Count {len(kids)} >>"
+    out, pos = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        pos.append(len(out))
+        corpo = o if isinstance(o, bytes) else o.encode("cp1252")
+        out += f"{i} 0 obj\n".encode() + corpo + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{p:010d} 00000 n \n".encode() for p in pos)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    Path(caminho).write_bytes(out)
+
+
+@etapa("documento de um dia por página (Evangelho do dia, orações)")
+def _():
+    import datetime as dt
+    from mantiqueira import paths, conhecimento as C
+    from mantiqueira.config import Config
+    from mantiqueira.db import Banco
+    import mantiqueira.intencoes as I
+    cab = "Evangelhos, Salmos e Orações (teste) — 06/11/2026 a 31/12/2026 · pág. {}"
+    evg_natal = ["No princípio era o Verbo, e o Verbo estava com Deus, e o Verbo era Deus."] * 30 + \
+        ["E o Verbo se fez carne e habitou entre nós."]
+    pags = [
+        ["EVANGELHOS DO DIA", "06 de novembro de 2026 — 31 de dezembro de 2026", "Sumário", "06/11/2026",
+         "Sexta-feira da 31ª Semana", "08/11/2026", "32º Domingo do Tempo Comum", "25/12/2026", "NATAL DO SENHOR"],
+        ["PARTE I — ORAÇÕES", "PAI NOSSO", "Pai nosso que estais nos céus, santificado seja o vosso nome;",
+         "venha a nós o vosso reino. Amém.", "AVE MARIA", "Ave Maria, cheia de graça, o Senhor é convosco. Amém."],
+        ["DIA 01", "06/11/2026 — Sexta-feira", "Sexta-feira da 31ª Semana do Tempo Comum (Ano Par)", "Cor litúrgica: Verde",
+         "1ª LEITURA (referência)", "Fl 3,17-4,1 — Nossa cidadania está nos céus", "SALMO RESPONSORIAL",
+         "Sl 121(122),1-2 (R. 1)", "R. Que alegria quando me disseram: vamos à casa do Senhor!",
+         "Que alegria quando me disseram / vamos à casa do Senhor.", "EVANGELHO",
+         "Lc 16,1-8 — A parábola do administrador desonesto",
+         "Naquele tempo, Jesus dizia aos discípulos: Um homem rico tinha um administrador.",
+         "E o senhor elogiou o administrador desonesto, porque agira com sagacidade."],
+        ["DIA 02", "07/11/2026 — Sábado", "Sábado da 31ª Semana do Tempo Comum (Ano Par)", "Cor litúrgica: Verde",
+         "1ª LEITURA (referência)", "Fl 4,10-19 — Tudo posso naquele que me fortalece", "SALMO RESPONSORIAL",
+         "Sl 111(112) (R. 1a)", "R. Feliz o homem que teme o Senhor.", "Feliz o homem que respeita o Senhor.",
+         "EVANGELHO", "Lc 16,9-15 — Ninguém pode servir a dois senhores", "Naquele tempo, disse Jesus aos discípulos."],
+        ["DIA 03", "08/11/2026 — Domingo", "32º Domingo do Tempo Comum — Ano A", "Cor litúrgica: Verde",
+         "1ª LEITURA (referência)", "Sb 6,12-16 — A Sabedoria se deixa encontrar", "2ª LEITURA (referência)",
+         "1Ts 4,13-18 — Os mortos em Cristo ressuscitarão primeiro", "Irmãos, não queremos que ignoreis.",
+         "SALMO RESPONSORIAL", "Sl 62(63) (R. 2b)", "R. A minha alma tem sede de vós.", "Ó Deus, vós sois o meu Deus.",
+         "EVANGELHO", "Mt 25,1-13 — A parábola das dez virgens", "Naquele tempo, Jesus disse aos discípulos esta parábola."],
+        ["DIA 50", "25/12/2026 — Sexta-feira", "NATAL DE NOSSO SENHOR JESUS CRISTO — Solenidade (Missa do dia)",
+         "Cor litúrgica: Branco", "1ª LEITURA (referência)", "Is 52,7-10 — Todos verão a salvação",
+         "SALMO RESPONSORIAL", "Sl 97(98) (R. 3a)", "R. Todos os confins da terra viram a salvação.", "Cantai ao Senhor.",
+         "EVANGELHO", "Jo 1,1-18 — O Verbo se fez carne"] + evg_natal[:25],
+        evg_natal[25:],
+    ]
+    pags = [[cab.format(i + 1)] + linhas for i, linhas in enumerate(pags)]
+    pdf = paths.DADOS / "Evangelhos teste.pdf"
+    pdf_paginas(pdf, pags)
+    k = C.Conhecimento()
+    k.adicionar(pdf)
+    d = k.dia("06/11/2026")
+    assert d and [t for t, _ in d["secoes"]][1:] == ["1ª LEITURA (referência)", "SALMO RESPONSORIAL", "EVANGELHO"], d
+    assert "pág." not in d["texto"], "o cabeçalho repetido não foi tirado"
+    natal = k.dia("25/12/2026")
+    assert "habitou entre nós" in natal["texto"], "a continuação do dia na página seguinte não veio junto"
+    hoje = dt.date(2026, 11, 6)
+    real, rot = C.datas_da_pergunta, I.Intencoes._rotulo_data
+    C.datas_da_pergunta = lambda p, hoje_=None: real(p, hoje)
+    I.Intencoes._rotulo_data = lambda self, d: {"06/11/2026": "hoje (06/11)", "07/11/2026": "amanhã (07/11)"}.get(d, d[:5])
+
+    class Falso:
+        pass
+    n = Falso()
+    n.cfg = Config(); n.db = Banco(paths.DADOS / "teste_liturgia.db"); n.olhos = None; n.sistemas = None
+    n.detalhe_texto = ""; n.contexto_extra = ""; n.parar_fala = lambda: None; n.cerebro = None; n.memoria = None
+    n.frases = None; n.indice = None; n.ultima = {}; n.voz = None; n.em_silencio = lambda: False; n.conhecimento = k
+    it = I.Intencoes(n)
+    rel = []
+
+    def diz(frase, *esperado, ctx=None):
+        n.contexto_extra = ""
+        r = it.tratar(frase, [])
+        rel.append(f"{frase} → {r}")
+        for e in esperado:
+            assert r and e in r, (frase, r)
+        if ctx:
+            assert r is None and ctx in n.contexto_extra, (frase, r, n.contexto_extra[:200])
+        return r
+    try:
+        diz("VOCÊ SABE QUAL O EVANGELHO DO DIA?", "Lc 16,1-8", "administrador desonesto", "Quer que eu leia?")
+        diz("LEIA PARA MIM", "Naquele tempo, Jesus dizia", "sagacidade")
+        diz("ME CONTE O QUE FALA ESSE EVANGELHO", ctx="administrador desonesto")
+        diz("e o salmo?", "Sl 121", "Que alegria")
+        diz("e amanhã?", "Sl 111", "Feliz o homem")
+        diz("O EVANGELHO DE HOJE É O EVANGELHO DO DIA 06-11", "Lc 16,1-8")
+        diz("qual a segunda leitura de domingo?", "1Ts 4,13-18")
+        diz("qual a primeira leitura de domingo?", "Sb 6,12-16", "só a referência")
+        diz("leia o evangelho do natal", "Jo 1,1-18", "habitou entre nós")
+        diz("qual o evangelho de 05/01", "Não tenho", "06/11 a 25/12")
+        diz("reza o pai nosso", "Pai nosso que estais nos céus", "Amém")
+        assert it.tratar("quantas cnps foram aprovadas hoje?", []) is None
+        assert not k.buscar("o que tenho na agenda hoje?")
+        assert k.buscar("qual a cor litúrgica de hoje?")[0]["texto"].count("Verde") >= 1
+    finally:
+        C.datas_da_pergunta, I.Intencoes._rotulo_data = real, rot
+    print("::notice title=Evangelho do dia::" + " %0A".join(x.replace("%", "%25")[:230] for x in rel), flush=True)
+
+
 @etapa("base de conhecimento (guias e PDF)")
 def _():
     from mantiqueira import paths

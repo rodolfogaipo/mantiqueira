@@ -228,3 +228,16 @@ SE ALGO DER ERRADO
 
 Modelos usados (uso pessoal): Qwen2.5 (Alibaba), XTTS-v2 (Coqui, licença não
 comercial), Whisper (OpenAI, via faster-whisper), Vosk, Piper.
+
+DOCUMENTOS COM UM DIA POR PÁGINA (Evangelho do dia, orações) — versão 1.4.23
+- Coloque o PDF em CONHECIMENTO. Ele separa cada dia (pela data no começo da
+  página) e cada parte (EVANGELHO, SALMO RESPONSORIAL, 1ª e 2ª LEITURA), e tira
+  o cabeçalho que se repete em todas as páginas.
+- "qual o Evangelho de hoje?" → referência e título, e pergunta se quer que leia.
+  "leia" / "sim" → lê o texto inteiro, do jeito que está no PDF.
+  "o que fala esse Evangelho?" → explica usando SÓ o texto do PDF.
+  "e o salmo?", "e amanhã?", "qual a 2ª leitura de domingo?", "o Evangelho do
+  Natal", "o Evangelho do dia 25/12".
+- "reza o Pai Nosso", "qual é a Salve Rainha?" → lê a oração do PDF.
+- Se a data não estiver no PDF, ele diz que não tem (não inventa).
+- PDFs colocados antes desta versão são lidos de novo sozinhos ao abrir.

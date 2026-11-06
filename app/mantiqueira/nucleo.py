@@ -129,6 +129,7 @@ class Nucleo:
             from .conhecimento import Conhecimento
             self.conhecimento = Conhecimento()
             self.conhecimento.importar_guias()
+            threading.Thread(target=self.conhecimento.reler_antigos, daemon=True).start()   # PDFs antigos: lê de novo, certo
         self._passo("Carregando a base de conhecimento…", conhecimento)
 
         def extras():

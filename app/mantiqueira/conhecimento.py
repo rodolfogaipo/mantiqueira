@@ -54,6 +54,7 @@ class Conhecimento:
             CREATE TABLE IF NOT EXISTS docs(id INTEGER PRIMARY KEY, nome TEXT, origem TEXT, caminho TEXT,
               hash TEXT, paginas INTEGER, trechos INTEGER, criado TEXT);
             CREATE TABLE IF NOT EXISTS trechos_txt(id INTEGER PRIMARY KEY, doc_id INTEGER, titulo TEXT, texto TEXT);
+            CREATE TABLE IF NOT EXISTS paginas(doc_id INTEGER, num INTEGER, texto TEXT, PRIMARY KEY(doc_id, num));
             """)
             try:
                 self.con.execute("CREATE VIRTUAL TABLE IF NOT EXISTS busca USING fts5(titulo, texto, doc_id UNINDEXED, "
@@ -70,14 +71,22 @@ class Conhecimento:
             if self.fts:
                 self.con.execute("DELETE FROM busca WHERE doc_id=?", (doc_id,))
             self.con.execute("DELETE FROM trechos_txt WHERE doc_id=?", (doc_id,))
+            self.con.execute("DELETE FROM paginas WHERE doc_id=?", (doc_id,))
             self.con.execute("DELETE FROM docs WHERE id=?", (doc_id,))
             self.con.commit()
 
-    def _gravar(self, nome, origem, caminho, h, paginas, trechos):
+    def _gravar(self, nome, origem, caminho, h, paginas, trechos, textos_pag=None, doc_id=None):
         with self.lock:
-            cur = self.con.execute("INSERT INTO docs(nome,origem,caminho,hash,paginas,trechos,criado) VALUES(?,?,?,?,?,?,?)",
-                                   (nome, origem, str(caminho), h, paginas, len(trechos), fmt(agora())))
-            did = cur.lastrowid
+            if doc_id is None:
+                cur = self.con.execute("INSERT INTO docs(nome,origem,caminho,hash,paginas,trechos,criado) VALUES(?,?,?,?,?,?,?)",
+                                       (nome, origem, str(caminho), h, paginas, len(trechos), fmt(agora())))
+                did = cur.lastrowid
+            else:
+                did = doc_id
+                self.con.execute("UPDATE docs SET paginas=?, trechos=? WHERE id=?", (paginas, len(trechos), did))
+            for num, texto in textos_pag or []:
+                self.con.execute("INSERT OR REPLACE INTO paginas(doc_id,num,texto) VALUES(?,?,?)", (did, num, texto))
+            self._cache_secoes = None
             for titulo, texto in trechos:
                 self.con.execute("INSERT INTO trechos_txt(doc_id,titulo,texto) VALUES(?,?,?)", (did, titulo, texto))
                 if self.fts:
@@ -116,12 +125,10 @@ class Conhecimento:
             n += 1
         copia.write_bytes(dados)
         ext = origem.suffix.lower()
+        paginas = []
         if ext == ".pdf":
             paginas = self._ler_pdf(copia)
-            trechos = []
-            for num, txt in paginas:
-                for k, pedaco in enumerate(dividir_texto(txt)):
-                    trechos.append((f"página {num}" + (f" ({k + 1})" if k else ""), pedaco))
+            trechos = trechos_das_paginas(paginas)
             npag = len(paginas)
         elif ext == ".docx":
             txt = ler_docx(copia)
@@ -137,8 +144,30 @@ class Conhecimento:
         if not trechos:
             copia.unlink(missing_ok=True)
             raise ValueError("Não encontrei texto nesse arquivo.")
-        self._gravar(origem.name, "usuario", copia, h, npag, trechos)
+        self._gravar(origem.name, "usuario", copia, h, npag, trechos, paginas)
         return origem.name, npag, len(trechos)
+
+    def reler_antigos(self):
+        """PDFs adicionados antes da versão 1.4.23: lê de novo (sem o cabeçalho repetido e guardando as páginas)."""
+        for d in self.q("SELECT id, nome, caminho FROM docs WHERE origem='usuario' AND lower(caminho) LIKE '%.pdf' AND "
+                        "id NOT IN (SELECT DISTINCT doc_id FROM paginas)"):
+            try:
+                caminho = Path(d["caminho"])
+                if not caminho.exists():
+                    continue
+                paginas = self._ler_pdf(caminho)
+                trechos = trechos_das_paginas(paginas)
+                if not trechos:
+                    continue
+                with self.lock:
+                    if self.fts:
+                        self.con.execute("DELETE FROM busca WHERE doc_id=?", (d["id"],))
+                    self.con.execute("DELETE FROM trechos_txt WHERE doc_id=?", (d["id"],))
+                self._gravar(d["nome"], "usuario", caminho, None, len(paginas), trechos, paginas, doc_id=d["id"])
+                log.info("documento lido de novo: %s (%d páginas, %d trechos)", d["nome"], len(paginas), len(trechos))
+            except Exception:
+                log.exception("reler %s", d["nome"])
+        self.status = ""
 
     def _ler_pdf(self, caminho):
         from pypdf import PdfReader
@@ -158,7 +187,7 @@ class Conhecimento:
             txt = limpar(txt)
             if txt:
                 paginas.append((i, txt))
-        return paginas
+        return sem_cabecalho(paginas)
 
     def _ocr_pagina(self, caminho, indice):
         """PDF escaneado: desenha a página como imagem e lê o texto (OCR)."""
@@ -188,6 +217,84 @@ class Conhecimento:
             return True
         return False
 
+    # ------------------------------------------------------------------ documentos com um dia por página (liturgia, agendas…)
+    def dia(self, data, secao=None):
+        """Texto do dia 'dd/mm/aaaa': a página que COMEÇA com essa data (+ a continuação na página seguinte)."""
+        linhas = self.q("SELECT p.doc_id, p.num, p.texto, d.nome FROM paginas p JOIN docs d ON d.id=p.doc_id "
+                        "WHERE d.origem='usuario' AND p.texto LIKE ? ORDER BY p.doc_id, p.num", (f"%{data}%",))
+        melhor = None
+        for r in linhas:
+            topo = [l for l in r["texto"].splitlines() if l.strip()][:5]
+            if not any(re.match(r"\s*" + re.escape(data) + r"\b", l) for l in topo):
+                continue
+            secs = secoes(r["texto"], 4)
+            if len(secs) < 2:
+                continue
+            nota = len(secs) + (10 if secao and any(chave_secao(t) == secao for t, _ in secs) else 0)
+            if not melhor or nota > melhor[0]:
+                melhor = (nota, r)
+        if not melhor:
+            return None
+        r = melhor[1]
+        texto = r["texto"]
+        for prox in self.q("SELECT texto FROM paginas WHERE doc_id=? AND num>? ORDER BY num LIMIT 3", (r["doc_id"], r["num"])):
+            if re.search(r"(?m)^\s*\d{2}/\d{2}/\d{4}\b", prox["texto"]) or re.search(r"(?m)^\s*DIA \d+\s*$", prox["texto"]):
+                break                                   # começou outro dia
+            texto += "\n" + prox["texto"]
+        return {"doc": r["nome"], "pagina": r["num"], "texto": texto, "secoes": secoes(texto, 4)}
+
+    def dia_por_nome(self, palavras):
+        """'natal', 'imaculada conceição' → a data do dia cujo cabeçalho tem essas palavras (a que aparece mais no começo)."""
+        if not palavras:
+            return None
+        melhor = None
+        for r in self.q("SELECT p.texto FROM paginas p JOIN docs d ON d.id=p.doc_id WHERE d.origem='usuario'"):
+            topo = [l for l in r["texto"].splitlines() if l.strip()][:5]
+            data = next((m.group(0) for l in topo for m in [re.match(r"\s*\d{2}/\d{2}/\d{4}", l)] if m), None)
+            if not data:
+                continue
+            cab = textutil.sem_acento(" ".join(l for l in topo if not re.match(r"\s*(DIA \d+|\d{2}/\d{2}/\d{4})", l)).lower())
+            if all(re.search(r"\b" + re.escape(w), cab) for w in palavras):
+                pos = min(cab.find(w) for w in palavras)
+                if not melhor or pos < melhor[0]:
+                    melhor = (pos, data.strip())
+        return melhor[1] if melhor else None
+
+    def periodo_dias(self):
+        """(primeira, última) data com página própria nos documentos do usuário."""
+        datas = []
+        for r in self.q("SELECT p.texto FROM paginas p JOIN docs d ON d.id=p.doc_id WHERE d.origem='usuario'"):
+            topo = [l for l in r["texto"].splitlines() if l.strip()][:5]
+            for l in topo:
+                m = re.match(r"\s*(\d{2})/(\d{2})/(\d{4})\b", l)
+                if m:
+                    datas.append((int(m.group(3)), int(m.group(2)), int(m.group(1))))
+        if not datas:
+            return None
+        a, b = min(datas), max(datas)
+        return f"{a[2]:02d}/{a[1]:02d}/{a[0]}", f"{b[2]:02d}/{b[1]:02d}/{b[0]}"
+
+    def chaves_secoes(self):
+        """{'dia': {chaves das seções dos dias}, 'soltas': {chave: (título, texto)}} — 'evangelho', 'salmo responsorial',
+        e textos com título próprio fora dos dias (orações: 'pai nosso', 'ave maria'…)."""
+        if getattr(self, "_cache_secoes", None) is not None:
+            return self._cache_secoes
+        from collections import Counter
+        dia_cont, soltas = Counter(), {}
+        for r in self.q("SELECT p.texto FROM paginas p JOIN docs d ON d.id=p.doc_id WHERE d.origem='usuario' ORDER BY p.doc_id, p.num"):
+            topo = [l for l in r["texto"].splitlines() if l.strip()][:5]
+            eh_dia = any(re.match(r"\s*\d{2}/\d{2}/\d{4}\b", l) for l in topo)
+            for t, corpo in secoes(r["texto"], 4 if eh_dia else 0):
+                if not t:
+                    continue
+                if eh_dia:
+                    dia_cont[chave_secao(t)] += 1
+                elif len(corpo) > 20 and chave_secao(t) not in soltas:
+                    soltas[chave_secao(t)] = (t, corpo)
+        dia = set(dia_cont)                                   # títulos das seções dos dias (EVANGELHO, SALMO…)
+        self._cache_secoes = {"dia": dia, "soltas": soltas, "frequentes": {c for c, v in dia_cont.items() if v >= 3}}
+        return self._cache_secoes
+
     # ------------------------------------------------------------------ consulta
     def q(self, sql, args=()):
         with self.lock:
@@ -197,6 +304,24 @@ class Conhecimento:
         return self.q("SELECT id, nome, origem, paginas, trechos, criado FROM docs ORDER BY origem DESC, criado DESC")
 
     def buscar(self, pergunta, k=4):
+        dia = []
+        ts0 = [t for t in termos(pergunta) if not t.isdigit() and t not in ("dia", "data", "amanha", "ontem", "domingo",
+                                                                          "segunda", "terca", "quarta", "quinta", "sexta", "sabado")]
+        for data in datas_da_pergunta(pergunta) if ts0 else []:
+            d = self.dia(data)
+            # só quando a pergunta tem a ver com o documento do dia: nome do documento, títulos ou cabeçalho do dia
+            alvo = ""
+            if d:
+                topo = [l for l in d["texto"].splitlines() if l.strip()][:5]
+                alvo = textutil.sem_acento(" ".join([d["doc"]] + topo + [t for t, _ in d["secoes"]]).lower())
+                alvo = re.sub(r"[^a-z0-9]+", " ", alvo)
+            if d and any(re.search(r"\b" + re.escape(t[:5]), alvo) or re.match(r"(sant[oa]s?|celebra\w*|festa|memoria|"
+                                                                                 r"solenidade|missa|liturgi\w*|cor)$", t)
+                         for t in ts0 if len(t) >= 3):
+                dia.append({"titulo": f"página {d['pagina']}", "texto": d["texto"], "nome": d["doc"], "origem": "usuario",
+                            "nota": 0, "peso": 99, "max": 3500})
+        if dia:
+            return dia[:2]                              # a página daquela data, inteira: é o que importa
         ts = termos(pergunta)
         if not ts:
             return []
@@ -236,6 +361,124 @@ class Conhecimento:
 
 
 # ---------------------------------------------------------------------- utilidades
+def sem_cabecalho(paginas):
+    """Tira o cabeçalho/rodapé que se repete em quase todas as páginas ('Documento X · pág. 7'): ele tem datas e
+    números que confundiam a busca (todas as páginas pareciam ser do dia 06/11)."""
+    if len(paginas) < 4:
+        return paginas
+    from collections import Counter
+
+    def forma(l):
+        return re.sub(r"\d+", "#", l.strip())
+    cont = Counter()
+    for _, t in paginas:
+        ls = [l for l in t.splitlines() if l.strip()]
+        cont.update({forma(l) for l in ls[:2] + ls[-2:]})
+    repetidas = {k for k, v in cont.items() if v >= max(3, len(paginas) * 0.4) and len(k) >= 15}
+    if not repetidas:
+        return paginas
+    out = []
+    for n, t in paginas:
+        ls = t.splitlines()
+        nz = [i for i, l in enumerate(ls) if l.strip()]
+        bordas = set(nz[:2] + nz[-2:])
+        t2 = "\n".join(l for i, l in enumerate(ls) if not (i in bordas and forma(l) in repetidas)).strip()
+        if t2:
+            out.append((n, t2))
+    return out
+
+
+def trechos_das_paginas(paginas):
+    trechos = []
+    for num, txt in paginas:
+        for k, pedaco in enumerate(dividir_texto(txt)):
+            trechos.append((f"página {num}" + (f" ({k + 1})" if k else ""), pedaco))
+    return trechos
+
+
+RX_TITULO = re.compile(r"^\s*[0-9ªº°]{0,3}\s*[A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ0-9ªº°,.'’\- –—]{2,70}?(\s*\([^)]{0,60}\))?\s*$")
+
+
+def eh_titulo(linha):
+    """Linha de título em MAIÚSCULAS ('EVANGELHO', '1ª LEITURA (referência)', 'PAI NOSSO')."""
+    if not RX_TITULO.match(linha):
+        return False
+    base = re.sub(r"\(.*\)", "", linha)
+    letras = [c for c in base if c.isalpha() and c not in "ªº"]
+    return len(letras) >= 4 and all(c.isupper() for c in letras) and not re.match(r"\s*(DIA|PARTE|PÁG)\b", base.strip())
+
+
+def chave_secao(titulo):
+    t = textutil.sem_acento(re.sub(r"\(.*\)", "", titulo).lower())
+    t = t.replace("ª", "a").replace("º", "o")
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", t)).strip()
+
+
+def secoes(texto, pular=0):
+    """[(título, corpo)] — o primeiro é ('', cabeçalho) com o que vem antes do primeiro título.
+    pular: nas primeiras N linhas (cabeçalho do dia: 'DIA 52', data, celebração em maiúsculas) não procura título."""
+    out, titulo, corpo = [], "", []
+    vistas = 0
+    for l in texto.splitlines():
+        if l.strip():
+            vistas += 1
+        if vistas > pular and eh_titulo(l):
+            if titulo or "".join(corpo).strip():
+                out.append((titulo, "\n".join(corpo).strip()))
+            titulo, corpo = l.strip(), []
+        else:
+            corpo.append(l)
+    if titulo or "".join(corpo).strip():
+        out.append((titulo, "\n".join(corpo).strip()))
+    return out
+
+
+DIAS_SEMANA = {"segunda": 0, "terca": 1, "quarta": 2, "quinta": 3, "sexta": 4, "sabado": 5, "domingo": 6}
+
+
+def datas_da_pergunta(pergunta, hoje=None):
+    """'hoje', 'amanhã', 'ontem', 'domingo', '08/11', '8 de novembro' → ['dd/mm/aaaa']."""
+    import datetime as dt
+    hoje = hoje or dt.date.today()
+    p = textutil.sem_acento(pergunta.lower())
+    out = []
+    if re.search(r"\bdepois de amanha\b", p):
+        out.append(hoje + dt.timedelta(days=2))
+    elif re.search(r"\bamanha\b", p):
+        out.append(hoje + dt.timedelta(days=1))
+    if re.search(r"\banteontem\b", p):
+        out.append(hoje - dt.timedelta(days=2))
+    elif re.search(r"\bontem\b", p):
+        out.append(hoje - dt.timedelta(days=1))
+    if re.search(r"\b(hoje|do dia|de agora)\b", p) and not out and not re.search(r"\d{1,2}[/\-.]\d{1,2}|\d+ de [a-z]+", p):
+        out.append(hoje)
+    p = re.sub(r"\b(primeira|segunda|1a|2a)\s+leitura", " leitura", p)
+    m = re.search(r"\b(segunda|terca|quarta|quinta|sexta|sabado|domingo)\b", p)
+    if m and not out:
+        dias = (DIAS_SEMANA[m.group(1)] - hoje.weekday()) % 7
+        if re.search(r"\b(passad[oa]|ultim[oa])\b", p):
+            dias = dias - 7 if dias else -7
+        out.append(hoje + dt.timedelta(days=dias))
+    from .leitor import _datas_da_pergunta
+    for d in _datas_da_pergunta(p):
+        dd, mm, aa = d.split("/")
+        ano = int(aa) if aa else hoje.year
+        try:
+            x = dt.date(ano, int(mm), int(dd))
+        except ValueError:
+            continue
+        if not aa and (hoje - x).days > 180:
+            x = dt.date(ano + 1, int(mm), int(dd))     # "05/01" em novembro = janeiro do ano que vem
+        out.append(x)
+    vistos, res = set(), []
+    for x in out:
+        s_ = x.strftime("%d/%m/%Y")
+        if s_ not in vistos:
+            vistos.add(s_)
+            res.append(s_)
+    return res
+
+
 def limpar(t):
     t = t.replace("\x00", " ").replace("­", "")
     t = re.sub(r"-\n(?=[a-zà-ú])", "", t)          # palavra quebrada no fim da linha

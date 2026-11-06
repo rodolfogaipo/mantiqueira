@@ -43,6 +43,11 @@ def _sem_medida(k):
 RX_SECUNDARIO = re.compile(r"\b(plano de corte|plano corte|plano de viracao|pct|rnc|custo|custos|relatorio|orcamento|folha model)\b")
 
 
+def _chave_sec(titulo):
+    from .conhecimento import chave_secao
+    return chave_secao(titulo)
+
+
 def principal(consulta, lista, exts=None):
     """O arquivo principal do produto: nome igual (com ou sem as medidas), de preferência na pasta IMPRESSOS.
     None quando não dá para ter certeza (aí ele pergunta)."""
@@ -144,7 +149,7 @@ class Intencoes:
         p = textutil.sem_acento(pergunta.lower()).strip(" ?!.")
         p = re.sub(r"(?<=[a-z])\d(?=[a-z])", "", p)              # "espreguicade3ira": tecla a mais no meio da palavra
         for f in (self.confirmar_energia, self.parar, self.imprimir_pedido, self.computador, self.peca_solidworks, self.achou, self.repetir, self.sons, self.voz_ajuste, self.silencio, self.apelidos, self.abrir_resultado,
-                  self.programa, self.lista_tipo, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
+                  self.programa, self.lista_tipo, self.leitura, self.abertos_hoje, self.mudou_na_pasta, self.memoria, self.frases, self.sistema_abrir, self.sistema_consulta,
                   self.conteudo_pasta, self.abrir_lista, self.abrir_pedido, self.buscar, self.ranking, self.ler_janela):
             try:
                 r = f(p, pergunta)
@@ -1555,3 +1560,132 @@ class Intencoes:
             return None
         self._lista_pendente = None
         return self.abrir_lista(p, original, itens=lp["itens"], onde=lp["onde"], lugar=lp["lugar"], exts=exts)
+
+    # ------------------------------------------------------------------ documentos da base: "qual o Evangelho de hoje?", "reza o Pai Nosso"
+    def _secao_pedida(self, p, chaves, frequentes=None):
+        q = " " + re.sub(r"\bprimeira\b", "1a", re.sub(r"\bsegunda\b(?=\s+leitura)", "2a", p)).replace("1ª", "1a").replace("2ª", "2a") + " "
+        q = re.sub(r"\b([12])\s*[ao]?\s+leitura\b", r"\1a leitura", q)
+        for c in sorted(chaves, key=len, reverse=True):
+            if f" {c} " in q:
+                return c
+        for c in sorted(frequentes if frequentes is not None else chaves, key=len, reverse=True):
+            prim = c.split()[0]
+            if len(prim) >= 5 and prim != "leitura" and re.search(r"\b" + prim + r"s?\b", q):
+                return c                                # "salmo" → "salmo responsorial"
+        if re.search(r"\bleitura\b", q):
+            ls = sorted(c for c in chaves if "leitura" in c)
+            return ls[0] if ls else None
+        return None
+
+    def leitura(self, p, original):
+        base = getattr(self.n, "conhecimento", None)
+        if not base or RX_IMPRIMIR.search(p) or (RX_ABRIR.search(p) and not re.search(r"\b(leia|le|ler)\b", p)):
+            return None
+        try:
+            ch = base.chaves_secoes()
+        except Exception:
+            log.exception("seções")
+            return None
+        if not ch["dia"] and not ch["soltas"]:
+            return None
+        from .conhecimento import datas_da_pergunta
+        t = self._trat()
+        ult = getattr(self, "_leitura", None)
+        if ult and time.time() - ult["t"] > 900:
+            ult = self._leitura = None
+        ler = bool(re.search(r"\b(leia|le|ler|lendo|leias|reza|reze|rezar|rezamos|ora|ore|orar|recita|recite|em voz alta|"
+                             r"na integra|completo|inteiro|todo)\b", p))
+        resumo = bool(re.search(r"\b(o que (ele |ela |isso )?(fala|diz|quer dizer|significa|ensina)|resum\w*|explica\w*|"
+                                r"sobre o que|me conte|me conta|reflexao|mensagem)\b", p))
+        secao = self._secao_pedida(p, ch["dia"], ch.get("frequentes"))
+        if secao and secao not in ch.get("frequentes", ch["dia"]) and \
+                any(len(c) >= 5 and re.search(r"\b" + re.escape(c) + r"\b", p) for c in ch["soltas"]):
+            secao = None                                  # "reza o Pai Nosso" é a oração, não um título raro de algum dia
+        datas = datas_da_pergunta(p)
+        # oração / texto com título próprio: "reza o Pai Nosso", "qual é a Salve Rainha?"
+        if not secao:
+            for c in sorted(ch["soltas"], key=len, reverse=True):
+                if len(c) >= 5 and re.search(r"\b" + re.escape(c) + r"\b", p) and \
+                        (ler or resumo or re.search(r"\b(qual|como e|como eh|me (fala|diz|ensina)|oracao)\b", p)):
+                    titulo, corpo = ch["soltas"][c]
+                    corpo = re.sub(r"\s*\n\s*", " ", corpo).strip()
+                    self._leitura = {"t": time.time(), "titulo": titulo.title(), "texto": corpo, "data": None, "secao": c}
+                    if resumo and not ler:
+                        self.n.contexto_extra = (f"TEXTO EXATO de '{titulo}' (documento do usuário):\n{corpo}\n"
+                                                 "Responda SÓ com base nesse texto; não invente nada.")
+                        return None
+                    return corpo
+        # continuação: "leia para mim", "sim", "e o salmo?", "e amanhã?", "o que fala esse evangelho?"
+        if ult and not secao and not datas:
+            curto = len(p.split()) <= 6
+            if (ler and curto) or re.fullmatch(r"(sim|pode|pode ler|quero|quero sim|leia|le|por favor)( sim| pra mim| para mim| por favor)*", p):
+                return ult["texto"]
+            if resumo and re.search(r"\b(esse|essa|este|esta|isso|ele|ela|dele|dela)\b|^(me conte|me conta|resum|explica)", p):
+                self.n.contexto_extra = (f"TEXTO EXATO de {ult['titulo']} (documento do usuário):\n{ult['texto']}\n"
+                                         "Responda SÓ com base nesse texto; não invente nada (nomes, fatos, números).")
+                return None
+            return None
+        if ult and ult.get("data") and not secao and datas and re.match(r"^(e|e o|e a|e de|e o de|e a de|e do|e da)\b", p):
+            secao = ult["secao"]                         # "e amanhã?" → mesma seção, outro dia
+        if not secao:
+            return None
+        if not datas:
+            # "o evangelho do Natal", "a leitura da Imaculada Conceição": procura o dia pelo nome da celebração
+            resto = re.sub(r"\b(qual|quais|e|o|a|os|as|do|da|de|dos|das|no|na|em|me|pra|para|mim|leia|le|ler|reza|reze|rezar|"
+                           r"fala|diz|que|isso|esse|essa|missa|liturgia|leitura|primeira|segunda|1a|2a|1ª|2ª|mantiqueira|"
+                           r"voce|sabe|senhor|por|favor|tem|hoje|dia|qual e|e o|sobre|conte|conta|me|ele|ela)\b", " ",
+                           re.sub(r"\b" + re.escape(secao) + r"s?\b|\b" + re.escape(secao.split()[0]) + r"s?\b", " ", p))
+            palavras = [w for w in re.findall(r"[a-z]{3,}", resto)]
+            achada = base.dia_por_nome(palavras) if palavras else None
+            if achada:
+                datas = [achada]
+        if not datas:
+            datas = [ult["data"]] if ult and ult.get("data") and re.match(r"^e\b", p) else datas_da_pergunta("hoje")
+        data = datas[0]
+        d = base.dia(data, secao)
+        rotulo = self._rotulo_data(data)
+        nome_sec = next((tt for tt, _ in (d or {}).get("secoes", []) if tt and _chave_sec(tt) == secao), secao.title())
+        nome_sec = re.sub(r"\s*\(.*\)", "", nome_sec).strip().capitalize()
+        nome_sec = re.sub(r"^(\d)a\b", r"\1ª", nome_sec)
+        if not d:
+            per = base.periodo_dias()
+            faixa = f" O documento vai de {per[0][:5]} a {per[1][:5]}." if per else ""
+            return f"Não tenho o {nome_sec.lower()} de {rotulo} nos documentos que o senhor me deu.{faixa}"
+        corpo = next((c for tt, c in d["secoes"] if tt and _chave_sec(tt) == secao), None)
+        if not corpo:
+            return f"No documento, {rotulo} não tem {nome_sec.lower()}, {t}."
+        cab = d["secoes"][0][1] if not d["secoes"][0][0] else ""
+        celebra = ""
+        for l in cab.splitlines():
+            if l.strip() and not re.match(r"\s*(DIA \d+|\d{2}/\d{2}/\d{4}|Cor lit)", l):
+                celebra = l.strip()
+                break
+        linhas = [l.strip() for l in corpo.splitlines() if l.strip()]
+        ref = linhas[0] if linhas else ""
+        texto_sem_ref = " ".join(linhas[1:])
+        self._leitura = {"t": time.time(), "titulo": f"{nome_sec} de {rotulo} ({ref})", "texto": f"{ref}. {texto_sem_ref}".strip(),
+                         "data": data, "secao": secao}
+        self.n.detalhe_texto = f"{nome_sec} · {data}" + (f" · {celebra}" if celebra else "") + f"\n{d['doc']}, página {d['pagina']}"
+        if resumo and not ler:
+            self.n.contexto_extra = (f"TEXTO EXATO do {nome_sec} de {rotulo} ({data}), do documento do usuário:\n{corpo}\n"
+                                     "Responda SÓ com base nesse texto; não invente nada (nomes, fatos, números).")
+            return None
+        if len(linhas) == 1:
+            return f"{nome_sec} de {rotulo}" + (f", {celebra}" if celebra else "") + f": {ref}. O documento traz só a referência."
+        if ler or len(linhas) <= 2:
+            return f"{nome_sec} de {rotulo}: {ref}. {texto_sem_ref}".strip()
+        extra = ""
+        if secao.startswith("salmo"):
+            refrao = next((l for l in linhas[1:3] if l.startswith("R.")), "")
+            extra = f" O refrão é: {refrao[2:].strip()}" if refrao else ""
+        return (f"{nome_sec} de {rotulo}" + (f", {celebra}" if celebra else "") + f": {ref}.{extra} Quer que eu leia?")
+
+    def _rotulo_data(self, data):
+        import datetime as dt
+        try:
+            d = dt.datetime.strptime(data, "%d/%m/%Y").date()
+        except ValueError:
+            return data
+        dif = (d - dt.date.today()).days
+        nome = {0: "hoje", 1: "amanhã", -1: "ontem"}.get(dif)
+        return f"{nome} ({data[:5]})" if nome else data[:5]
